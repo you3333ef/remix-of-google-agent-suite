@@ -77,6 +77,48 @@ export type Database = {
         }
         Relationships: []
       }
+      custom_agents: {
+        Row: {
+          avatar: string
+          color: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          provider: string
+          system_prompt: string | null
+          tools: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar?: string
+          color?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          provider?: string
+          system_prompt?: string | null
+          tools?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar?: string
+          color?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          provider?: string
+          system_prompt?: string | null
+          tools?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       files: {
         Row: {
           content: string | null
@@ -219,8 +261,10 @@ export type Database = {
       }
       user_settings: {
         Row: {
+          active_project_id: string | null
           api_keys: Json | null
           created_at: string
+          current_file_id: string | null
           id: string
           preferred_agent: string | null
           preferred_ai_provider: string | null
@@ -229,8 +273,10 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          active_project_id?: string | null
           api_keys?: Json | null
           created_at?: string
+          current_file_id?: string | null
           id?: string
           preferred_agent?: string | null
           preferred_ai_provider?: string | null
@@ -239,8 +285,10 @@ export type Database = {
           user_id: string
         }
         Update: {
+          active_project_id?: string | null
           api_keys?: Json | null
           created_at?: string
+          current_file_id?: string | null
           id?: string
           preferred_agent?: string | null
           preferred_ai_provider?: string | null
@@ -248,7 +296,22 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_settings_active_project_id_fkey"
+            columns: ["active_project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_settings_current_file_id_fkey"
+            columns: ["current_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

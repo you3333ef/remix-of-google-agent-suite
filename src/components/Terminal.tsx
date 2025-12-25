@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { Terminal as TerminalIcon, X, Maximize2, Minimize2, Plus } from 'lucide-react';
+import { Terminal as TerminalIcon, Maximize2, Minimize2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
 interface TerminalProps {
@@ -9,20 +10,21 @@ interface TerminalProps {
 }
 
 interface TerminalLine {
-  type: 'input' | 'output' | 'error' | 'success';
+  type: 'input' | 'output' | 'error' | 'success' | 'system';
   content: string;
   timestamp: Date;
 }
 
 export default function TerminalComponent({ isExpanded, onToggleExpand }: TerminalProps) {
   const [lines, setLines] = useState<TerminalLine[]>([
-    { type: 'output', content: 'Agentic Max Terminal v1.0.0', timestamp: new Date() },
-    { type: 'output', content: 'Type "help" for available commands.', timestamp: new Date() },
+    { type: 'system', content: 'Agentic Max Terminal v1.0.0 - AI-Powered Shell', timestamp: new Date() },
+    { type: 'output', content: 'Connected to AI backend. Type commands or ask questions.', timestamp: new Date() },
     { type: 'output', content: '─'.repeat(50), timestamp: new Date() },
   ]);
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [isProcessing, setIsProcessing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -30,66 +32,105 @@ export default function TerminalComponent({ isExpanded, onToggleExpand }: Termin
     scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
   }, [lines]);
 
-  const handleCommand = (cmd: string) => {
-    const trimmedCmd = cmd.trim().toLowerCase();
-    
+  const processCommand = async (cmd: string) => {
+    const trimmedCmd = cmd.trim();
+    if (!trimmedCmd) return;
+
     setLines(prev => [...prev, { type: 'input', content: `$ ${cmd}`, timestamp: new Date() }]);
     setHistory(prev => [...prev, cmd]);
     setHistoryIndex(-1);
 
-    // Simple command simulation
-    switch (trimmedCmd) {
-      case 'help':
-        setLines(prev => [...prev, 
-          { type: 'output', content: 'Available commands:', timestamp: new Date() },
-          { type: 'output', content: '  help     - Show this help message', timestamp: new Date() },
-          { type: 'output', content: '  clear    - Clear terminal', timestamp: new Date() },
-          { type: 'output', content: '  agents   - List available agents', timestamp: new Date() },
-          { type: 'output', content: '  tools    - List available tools', timestamp: new Date() },
-          { type: 'output', content: '  status   - Show system status', timestamp: new Date() },
-        ]);
-        break;
-      case 'clear':
-        setLines([]);
-        break;
-      case 'agents':
-        setLines(prev => [...prev,
-          { type: 'success', content: '✓ Manus       [ONLINE]  OpenAI', timestamp: new Date() },
-          { type: 'success', content: '✓ Capy.ai     [ONLINE]  Anthropic', timestamp: new Date() },
-          { type: 'success', content: '✓ Same.new    [ONLINE]  OpenRouter', timestamp: new Date() },
-          { type: 'success', content: '✓ Cursor      [ONLINE]  Anthropic', timestamp: new Date() },
-          { type: 'success', content: '✓ Bolt.DIY    [ONLINE]  Bolt', timestamp: new Date() },
-        ]);
-        break;
-      case 'tools':
-        setLines(prev => [...prev,
-          { type: 'output', content: 'Google APIs: Maps, Analytics, Ads, Business, Merchant', timestamp: new Date() },
-          { type: 'output', content: 'Development: Terminal, Code Editor, Web Clone, App Builder', timestamp: new Date() },
-          { type: 'output', content: 'Communication: Email, DNS', timestamp: new Date() },
-          { type: 'output', content: 'AI: Chat, Deep Research', timestamp: new Date() },
-          { type: 'output', content: 'Automation: Testing, Workflows', timestamp: new Date() },
-        ]);
-        break;
-      case 'status':
-        setLines(prev => [...prev,
-          { type: 'success', content: '● System Status: OPERATIONAL', timestamp: new Date() },
-          { type: 'output', content: '  CPU: 23%  |  Memory: 4.2GB  |  Network: Connected', timestamp: new Date() },
-          { type: 'output', content: '  Active Agents: 5  |  Queued Tasks: 0', timestamp: new Date() },
-        ]);
-        break;
-      default:
-        if (trimmedCmd) {
-          setLines(prev => [...prev, 
-            { type: 'error', content: `Command not found: ${cmd}`, timestamp: new Date() },
-            { type: 'output', content: 'Type "help" for available commands.', timestamp: new Date() },
-          ]);
+    // Handle built-in commands
+    if (trimmedCmd.toLowerCase() === 'clear') {
+      setLines([]);
+      return;
+    }
+
+    if (trimmedCmd.toLowerCase() === 'help') {
+      setLines(prev => [...prev,
+        { type: 'output', content: 'Built-in commands:', timestamp: new Date() },
+        { type: 'output', content: '  clear    - Clear terminal', timestamp: new Date() },
+        { type: 'output', content: '  help     - Show this help', timestamp: new Date() },
+        { type: 'output', content: '', timestamp: new Date() },
+        { type: 'output', content: 'Or ask any question - AI will respond!', timestamp: new Date() },
+      ]);
+      return;
+    }
+
+    // Send to AI for processing
+    setIsProcessing(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          messages: [{ 
+            role: 'user', 
+            content: `You are a terminal assistant. Respond concisely to this command/question: ${trimmedCmd}. If it's a code question, provide working examples. Use plain text, no markdown formatting.`
+          }],
+          agentName: 'Terminal AI',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to process command');
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullResponse = '';
+      let textBuffer = '';
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          textBuffer += decoder.decode(value, { stream: true });
+          
+          let newlineIndex: number;
+          while ((newlineIndex = textBuffer.indexOf('\n')) !== -1) {
+            let line = textBuffer.slice(0, newlineIndex);
+            textBuffer = textBuffer.slice(newlineIndex + 1);
+
+            if (line.endsWith('\r')) line = line.slice(0, -1);
+            if (!line.startsWith('data: ')) continue;
+
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === '[DONE]') continue;
+
+            try {
+              const parsed = JSON.parse(jsonStr);
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) fullResponse += content;
+            } catch { /* ignore */ }
+          }
         }
+      }
+
+      // Add response lines
+      const responseLines = fullResponse.split('\n').filter(l => l.trim());
+      responseLines.forEach(line => {
+        setLines(prev => [...prev, { type: 'success', content: line, timestamp: new Date() }]);
+      });
+
+    } catch (error) {
+      setLines(prev => [...prev, { 
+        type: 'error', 
+        content: `Error: ${(error as Error).message}`, 
+        timestamp: new Date() 
+      }]);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleCommand(input);
+    if (e.key === 'Enter' && !isProcessing) {
+      processCommand(input);
       setInput('');
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
@@ -121,6 +162,7 @@ export default function TerminalComponent({ isExpanded, onToggleExpand }: Termin
         <div className="flex items-center gap-2">
           <TerminalIcon className="h-4 w-4 text-neon-green" />
           <span className="text-sm font-medium text-foreground font-mono">Terminal</span>
+          {isProcessing && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
         </div>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon-sm" onClick={onToggleExpand}>
@@ -139,11 +181,12 @@ export default function TerminalComponent({ isExpanded, onToggleExpand }: Termin
           <div
             key={i}
             className={cn(
-              "leading-6",
+              "leading-6 whitespace-pre-wrap",
               line.type === 'input' && "text-primary",
               line.type === 'output' && "text-muted-foreground",
               line.type === 'error' && "text-destructive",
-              line.type === 'success' && "text-neon-green"
+              line.type === 'success' && "text-neon-green",
+              line.type === 'system' && "text-accent"
             )}
           >
             {line.content}
@@ -160,6 +203,7 @@ export default function TerminalComponent({ isExpanded, onToggleExpand }: Termin
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             className="flex-1 bg-transparent outline-none text-foreground caret-primary"
+            disabled={isProcessing}
             autoFocus
           />
         </div>

@@ -24,15 +24,23 @@ import { cn } from '@/lib/utils';
 type ActivePanel = 'chat' | 'code' | 'preview' | 'terminal' | 'clone';
 type SidebarTab = 'tools' | 'files';
 
+interface ExtendedAgent extends Agent {
+  systemPrompt?: string;
+}
+
 export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [activeAgent, setActiveAgent] = useState<Agent>(defaultAgents[0]);
+  const [activeAgent, setActiveAgent] = useState<ExtendedAgent>(defaultAgents[0]);
   const [activePanel, setActivePanel] = useState<ActivePanel>('chat');
   const [showAgentBuilder, setShowAgentBuilder] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [rightPanelMode, setRightPanelMode] = useState<'code' | 'preview' | 'split' | 'clone'>('split');
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('tools');
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
+  const [clonedHtml, setClonedHtml] = useState<string>('');
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string>('');
+  const [selectedFileContent, setSelectedFileContent] = useState<string>('');
   const { user, signOut, loading } = useAuth();
   const navigate = useNavigate();
 
@@ -48,6 +56,19 @@ export default function MainLayout() {
       setRightPanelMode('clone');
       setActivePanel('clone');
     }
+  };
+
+  const handleFileSelect = (file: { id: string; name: string; content: string | null }) => {
+    setSelectedFileId(file.id);
+    setSelectedFileName(file.name);
+    setSelectedFileContent(file.content || '');
+    setRightPanelMode('code');
+    setActivePanel('code');
+  };
+
+  const handleCodeGenerated = (html: string) => {
+    setClonedHtml(html);
+    setRightPanelMode('preview');
   };
 
   const panelButtons = [
@@ -225,7 +246,7 @@ export default function MainLayout() {
               {sidebarTab === 'tools' ? (
                 <ToolsSidebar onToolSelect={handleToolSelect} />
               ) : (
-                <FileExplorer />
+                <FileExplorer onFileSelect={handleFileSelect} />
               )}
             </div>
 
@@ -266,27 +287,37 @@ export default function MainLayout() {
         )}>
           {/* Mobile: Show based on activePanel */}
           <div className="lg:hidden h-full">
-            {activePanel === 'code' && <CodeEditor />}
-            {activePanel === 'preview' && <PreviewPane />}
+            {activePanel === 'code' && (
+              <CodeEditor 
+                fileId={selectedFileId || undefined}
+                fileName={selectedFileName}
+                initialContent={selectedFileContent}
+              />
+            )}
+            {activePanel === 'preview' && <PreviewPane htmlContent={clonedHtml} />}
             {activePanel === 'terminal' && <TerminalComponent />}
-            {activePanel === 'clone' && <WebCloneTool />}
+            {activePanel === 'clone' && <WebCloneTool onCodeGenerated={handleCodeGenerated} />}
           </div>
 
           {/* Desktop: Show based on rightPanelMode */}
           <div className="hidden lg:flex flex-col h-full">
             {rightPanelMode === 'code' && (
-              <CodeEditor />
+              <CodeEditor 
+                fileId={selectedFileId || undefined}
+                fileName={selectedFileName}
+                initialContent={selectedFileContent}
+              />
             )}
-            {rightPanelMode === 'preview' && (
-              <PreviewPane />
-            )}
-            {rightPanelMode === 'clone' && (
-              <WebCloneTool />
-            )}
+            {rightPanelMode === 'preview' && <PreviewPane htmlContent={clonedHtml} />}
+            {rightPanelMode === 'clone' && <WebCloneTool onCodeGenerated={handleCodeGenerated} />}
             {rightPanelMode === 'split' && (
               <div className="flex flex-col h-full">
                 <div className="flex-1 min-h-0">
-                  <CodeEditor />
+                  <CodeEditor 
+                    fileId={selectedFileId || undefined}
+                    fileName={selectedFileName}
+                    initialContent={selectedFileContent}
+                  />
                 </div>
                 <div className="h-64 border-t border-border">
                   <TerminalComponent />
