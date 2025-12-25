@@ -1,6 +1,11 @@
-import { useState } from 'react';
-import { X, Bot, Wand2, Sparkles, Plus, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Bot, Wand2, Plus, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { aiProviders } from '@/data/agents';
 import { AIProvider } from '@/types/agent';
 import { cn } from '@/lib/utils';
@@ -8,22 +13,39 @@ import { cn } from '@/lib/utils';
 interface AgentBuilderProps {
   isOpen: boolean;
   onClose: () => void;
+  onAgentCreated?: () => void;
 }
 
-export default function AgentBuilder({ isOpen, onClose }: AgentBuilderProps) {
+export default function AgentBuilder({ isOpen, onClose, onAgentCreated }: AgentBuilderProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [systemPrompt, setSystemPrompt] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<AIProvider>('openai');
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [avatar, setAvatar] = useState('🤖');
+  const [selectedColor, setSelectedColor] = useState('from-cyan-500 to-blue-600');
+  const [isCreating, setIsCreating] = useState(false);
+  const { toast } = useToast();
+  const { user } = useAuth();
 
   const availableTools = [
     'Google Maps', 'Analytics', 'Ads', 'Business Profile',
     'Terminal', 'Code Editor', 'Web Clone', 'App Builder',
-    'Email', 'DNS', 'Testing', 'Automation'
+    'Email', 'DNS', 'Testing', 'Automation', 'AI Chat', 'Deep Research'
   ];
 
-  const avatarOptions = ['🤖', '🦾', '🧠', '⚡', '🔮', '🎯', '🚀', '🌟', '💎', '🔥'];
+  const avatarOptions = ['🤖', '🦾', '🧠', '⚡', '🔮', '🎯', '🚀', '🌟', '💎', '🔥', '🦫', '🐙', '🦊', '🐺'];
+
+  const colorOptions = [
+    'from-cyan-500 to-blue-600',
+    'from-purple-500 to-pink-600',
+    'from-green-500 to-emerald-600',
+    'from-orange-500 to-red-600',
+    'from-yellow-500 to-orange-600',
+    'from-indigo-500 to-purple-600',
+    'from-pink-500 to-rose-600',
+    'from-teal-500 to-cyan-600',
+  ];
 
   const toggleTool = (tool: string) => {
     setSelectedTools(prev =>
@@ -33,9 +55,47 @@ export default function AgentBuilder({ isOpen, onClose }: AgentBuilderProps) {
     );
   };
 
-  const handleCreate = () => {
-    console.log('Creating agent:', { name, description, selectedProvider, selectedTools, avatar });
-    onClose();
+  const resetForm = () => {
+    setName('');
+    setDescription('');
+    setSystemPrompt('');
+    setSelectedProvider('openai');
+    setSelectedTools([]);
+    setAvatar('🤖');
+    setSelectedColor('from-cyan-500 to-blue-600');
+  };
+
+  const handleCreate = async () => {
+    if (!name.trim() || !user) {
+      toast({ title: "Error", description: "Please enter a name", variant: "destructive" });
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const { error } = await supabase.from('custom_agents').insert({
+        user_id: user.id,
+        name: name.trim(),
+        description: description.trim() || null,
+        avatar,
+        tools: selectedTools,
+        provider: selectedProvider,
+        color: selectedColor,
+        system_prompt: systemPrompt.trim() || null,
+      });
+
+      if (error) throw error;
+
+      toast({ title: "Success!", description: `Agent "${name}" created successfully` });
+      resetForm();
+      onAgentCreated?.();
+      onClose();
+    } catch (error) {
+      console.error('Error creating agent:', error);
+      toast({ title: "Error", description: "Failed to create agent", variant: "destructive" });
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -82,27 +142,55 @@ export default function AgentBuilder({ isOpen, onClose }: AgentBuilderProps) {
             </div>
           </div>
 
+          {/* Color Selection */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Color Theme</label>
+            <div className="flex items-center gap-2 flex-wrap">
+              {colorOptions.map((color) => (
+                <button
+                  key={color}
+                  onClick={() => setSelectedColor(color)}
+                  className={cn(
+                    "w-10 h-10 rounded-xl bg-gradient-to-br transition-all duration-200",
+                    color,
+                    selectedColor === color
+                      ? "ring-2 ring-primary ring-offset-2 ring-offset-background scale-110"
+                      : "hover:scale-105"
+                  )}
+                />
+              ))}
+            </div>
+          </div>
+
           {/* Name */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Agent Name</label>
-            <input
-              type="text"
+            <label className="text-sm font-medium text-foreground">Agent Name *</label>
+            <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g., Research Assistant"
-              className="w-full px-4 py-3 bg-secondary rounded-xl text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary/50 transition-all"
             />
           </div>
 
           {/* Description */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">Description</label>
-            <textarea
+            <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe what this agent specializes in..."
+              rows={2}
+            />
+          </div>
+
+          {/* System Prompt */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">System Prompt (Optional)</label>
+            <Textarea
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              placeholder="Custom instructions for the AI... e.g., 'You are an expert in Python development and always provide code examples.'"
               rows={3}
-              className="w-full px-4 py-3 bg-secondary rounded-xl text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary/50 transition-all resize-none"
             />
           </div>
 
@@ -159,11 +247,15 @@ export default function AgentBuilder({ isOpen, onClose }: AgentBuilderProps) {
           <Button
             variant="agent"
             onClick={handleCreate}
-            disabled={!name.trim()}
+            disabled={!name.trim() || isCreating}
             className="gap-2"
           >
-            <Wand2 className="h-4 w-4" />
-            Create Agent
+            {isCreating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Wand2 className="h-4 w-4" />
+            )}
+            {isCreating ? 'Creating...' : 'Create Agent'}
           </Button>
         </div>
       </div>

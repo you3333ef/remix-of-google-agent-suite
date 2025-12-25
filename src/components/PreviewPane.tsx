@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { RefreshCw, Maximize2, Minimize2, Smartphone, Tablet, Monitor, ExternalLink, Globe } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { RefreshCw, Maximize2, Minimize2, Smartphone, Tablet, Monitor, ExternalLink, Globe, Code } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -8,12 +8,30 @@ type ViewportSize = 'mobile' | 'tablet' | 'desktop';
 interface PreviewPaneProps {
   isExpanded?: boolean;
   onToggleExpand?: () => void;
+  htmlContent?: string;
+  previewUrl?: string;
 }
 
-export default function PreviewPane({ isExpanded, onToggleExpand }: PreviewPaneProps) {
+export default function PreviewPane({ isExpanded, onToggleExpand, htmlContent, previewUrl }: PreviewPaneProps) {
   const [viewport, setViewport] = useState<ViewportSize>('desktop');
   const [isLoading, setIsLoading] = useState(false);
-  const [url, setUrl] = useState('https://example.com');
+  const [url, setUrl] = useState(previewUrl || '');
+  const [content, setContent] = useState(htmlContent || '');
+  const [mode, setMode] = useState<'url' | 'html'>(htmlContent ? 'html' : 'url');
+
+  useEffect(() => {
+    if (htmlContent) {
+      setContent(htmlContent);
+      setMode('html');
+    }
+  }, [htmlContent]);
+
+  useEffect(() => {
+    if (previewUrl) {
+      setUrl(previewUrl);
+      setMode('url');
+    }
+  }, [previewUrl]);
 
   const viewportSizes = {
     mobile: { width: '375px', icon: Smartphone },
@@ -23,7 +41,7 @@ export default function PreviewPane({ isExpanded, onToggleExpand }: PreviewPaneP
 
   const handleRefresh = () => {
     setIsLoading(true);
-    setTimeout(() => setIsLoading(false), 1000);
+    setTimeout(() => setIsLoading(false), 500);
   };
 
   return (
@@ -38,17 +56,26 @@ export default function PreviewPane({ isExpanded, onToggleExpand }: PreviewPaneP
           <span className="text-sm font-medium text-foreground">Preview</span>
         </div>
 
-        {/* URL Bar */}
-        <div className="flex-1 mx-4 max-w-md">
-          <div className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-1.5">
-            <span className="text-neon-green text-xs">●</span>
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="flex-1 bg-transparent text-xs text-muted-foreground outline-none"
-            />
-          </div>
+        {/* Mode Toggle */}
+        <div className="flex items-center gap-0.5 bg-secondary rounded-lg p-0.5">
+          <button
+            onClick={() => setMode('url')}
+            className={cn(
+              "px-2 py-1 rounded-md text-xs transition-colors",
+              mode === 'url' ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+            )}
+          >
+            URL
+          </button>
+          <button
+            onClick={() => setMode('html')}
+            className={cn(
+              "px-2 py-1 rounded-md text-xs transition-colors",
+              mode === 'html' ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+            )}
+          >
+            HTML
+          </button>
         </div>
 
         {/* Controls */}
@@ -77,14 +104,27 @@ export default function PreviewPane({ isExpanded, onToggleExpand }: PreviewPaneP
           <Button variant="ghost" size="icon-sm" onClick={handleRefresh} title="Refresh">
             <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
           </Button>
-          <Button variant="ghost" size="icon-sm" title="Open in new tab">
-            <ExternalLink className="h-3.5 w-3.5" />
-          </Button>
           <Button variant="ghost" size="icon-sm" onClick={onToggleExpand}>
             {isExpanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
           </Button>
         </div>
       </div>
+
+      {/* URL Bar (when in URL mode) */}
+      {mode === 'url' && (
+        <div className="px-3 py-2 border-b border-border bg-secondary/30">
+          <div className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-1.5">
+            <span className="text-neon-green text-xs">●</span>
+            <input
+              type="text"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="Enter URL to preview..."
+              className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Preview Content */}
       <div className="flex-1 overflow-hidden bg-background/50 flex items-center justify-center p-4">
@@ -95,43 +135,34 @@ export default function PreviewPane({ isExpanded, onToggleExpand }: PreviewPaneP
           )}
           style={{ width: viewportSizes[viewport].width, maxWidth: '100%' }}
         >
-          {/* Demo Content */}
-          <div className="h-full flex flex-col">
-            {/* Demo Header */}
-            <div className="bg-gradient-to-r from-primary/20 to-accent/20 p-4 border-b border-border">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center text-primary-foreground font-bold text-sm">
-                    A
-                  </div>
-                  <span className="font-semibold text-foreground">Agentic Max</span>
-                </div>
-                <div className="flex gap-2">
-                  <div className="w-16 h-6 bg-secondary rounded-md" />
-                  <div className="w-16 h-6 bg-secondary rounded-md" />
-                </div>
+          {mode === 'html' && content ? (
+            <iframe
+              srcDoc={content}
+              className="w-full h-full"
+              sandbox="allow-same-origin allow-scripts"
+              title="HTML Preview"
+            />
+          ) : mode === 'url' && url ? (
+            <iframe
+              src={url}
+              className="w-full h-full"
+              sandbox="allow-same-origin allow-scripts"
+              title="URL Preview"
+            />
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-center p-8">
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+                <Globe className="h-8 w-8 text-primary" />
               </div>
-            </div>
-
-            {/* Demo Hero */}
-            <div className="flex-1 p-6 flex flex-col items-center justify-center text-center space-y-4">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-3xl animate-float">
-                🤖
-              </div>
-              <h2 className="text-xl font-bold gradient-text">AI Agent Suite</h2>
+              <h3 className="font-semibold mb-1">Live Preview</h3>
               <p className="text-sm text-muted-foreground max-w-xs">
-                Full Google Integration • Multi-Provider AI • No-Code Builder
+                {mode === 'url' 
+                  ? 'Enter a URL above to preview any website'
+                  : 'Clone a website or generate code to see a live preview here'
+                }
               </p>
-              <div className="flex gap-2">
-                <div className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium">
-                  Get Started
-                </div>
-                <div className="px-4 py-2 bg-secondary text-foreground rounded-lg text-sm">
-                  Learn More
-                </div>
-              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
