@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Menu, X, PanelLeftClose, PanelLeft, Plus, Settings, 
-  MessageSquare, Code, Eye, Terminal as TerminalIcon, Bot
+  MessageSquare, Code, Eye, Terminal as TerminalIcon, Bot,
+  Copy, FolderOpen, LogOut
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import AgentSelector from './AgentSelector';
@@ -11,25 +13,63 @@ import CodeEditor from './CodeEditor';
 import PreviewPane from './PreviewPane';
 import TerminalComponent from './Terminal';
 import AgentBuilder from './AgentBuilder';
+import FileExplorer from './FileExplorer';
+import SettingsPanel from './SettingsPanel';
+import WebCloneTool from './WebCloneTool';
 import { defaultAgents } from '@/data/agents';
 import { Agent } from '@/types/agent';
+import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
-type ActivePanel = 'chat' | 'code' | 'preview' | 'terminal';
+type ActivePanel = 'chat' | 'code' | 'preview' | 'terminal' | 'clone';
+type SidebarTab = 'tools' | 'files';
 
 export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeAgent, setActiveAgent] = useState<Agent>(defaultAgents[0]);
   const [activePanel, setActivePanel] = useState<ActivePanel>('chat');
   const [showAgentBuilder, setShowAgentBuilder] = useState(false);
-  const [rightPanelMode, setRightPanelMode] = useState<'code' | 'preview' | 'split'>('split');
+  const [showSettings, setShowSettings] = useState(false);
+  const [rightPanelMode, setRightPanelMode] = useState<'code' | 'preview' | 'split' | 'clone'>('split');
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('tools');
+  const [selectedTool, setSelectedTool] = useState<string | null>(null);
+  const { user, signOut, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/auth');
+    }
+  }, [user, loading, navigate]);
+
+  const handleToolSelect = (toolId: string) => {
+    setSelectedTool(toolId);
+    if (toolId === 'web-clone') {
+      setRightPanelMode('clone');
+      setActivePanel('clone');
+    }
+  };
 
   const panelButtons = [
     { id: 'chat' as const, icon: MessageSquare, label: 'Chat' },
     { id: 'code' as const, icon: Code, label: 'Code' },
     { id: 'preview' as const, icon: Eye, label: 'Preview' },
     { id: 'terminal' as const, icon: TerminalIcon, label: 'Terminal' },
+    { id: 'clone' as const, icon: Copy, label: 'Clone' },
   ];
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center animate-pulse">
+            <Bot className="h-6 w-6 text-primary-foreground" />
+          </div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
@@ -57,7 +97,7 @@ export default function MainLayout() {
 
         {/* Mobile Panel Switcher */}
         <div className="flex lg:hidden items-center gap-1 bg-secondary rounded-lg p-0.5">
-          {panelButtons.map((panel) => {
+          {panelButtons.slice(0, 4).map((panel) => {
             const Icon = panel.icon;
             return (
               <button
@@ -106,11 +146,26 @@ export default function MainLayout() {
             >
               Preview
             </button>
+            <button
+              onClick={() => setRightPanelMode('clone')}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-sm transition-colors",
+                rightPanelMode === 'clone' ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+              )}
+            >
+              Clone
+            </button>
           </div>
 
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" onClick={() => setShowSettings(true)}>
             <Settings className="h-4 w-4" />
           </Button>
+
+          {user && (
+            <Button variant="ghost" size="icon" onClick={signOut} title="Sign Out">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </header>
 
@@ -138,9 +193,40 @@ export default function MainLayout() {
               <AgentSelector activeAgent={activeAgent} onSelectAgent={setActiveAgent} />
             </div>
 
-            {/* Tools */}
+            {/* Sidebar Tabs */}
+            <div className="flex border-b border-border">
+              <button
+                onClick={() => setSidebarTab('tools')}
+                className={cn(
+                  "flex-1 px-4 py-2 text-sm font-medium transition-colors",
+                  sidebarTab === 'tools'
+                    ? "text-primary border-b-2 border-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Tools
+              </button>
+              <button
+                onClick={() => setSidebarTab('files')}
+                className={cn(
+                  "flex-1 px-4 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-2",
+                  sidebarTab === 'files'
+                    ? "text-primary border-b-2 border-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <FolderOpen className="h-4 w-4" />
+                Files
+              </button>
+            </div>
+
+            {/* Sidebar Content */}
             <div className="flex-1 overflow-y-auto py-2 scrollbar-thin">
-              <ToolsSidebar />
+              {sidebarTab === 'tools' ? (
+                <ToolsSidebar onToolSelect={handleToolSelect} />
+              ) : (
+                <FileExplorer />
+              )}
             </div>
 
             {/* Create Agent Button */}
@@ -183,6 +269,7 @@ export default function MainLayout() {
             {activePanel === 'code' && <CodeEditor />}
             {activePanel === 'preview' && <PreviewPane />}
             {activePanel === 'terminal' && <TerminalComponent />}
+            {activePanel === 'clone' && <WebCloneTool />}
           </div>
 
           {/* Desktop: Show based on rightPanelMode */}
@@ -192,6 +279,9 @@ export default function MainLayout() {
             )}
             {rightPanelMode === 'preview' && (
               <PreviewPane />
+            )}
+            {rightPanelMode === 'clone' && (
+              <WebCloneTool />
             )}
             {rightPanelMode === 'split' && (
               <div className="flex flex-col h-full">
@@ -207,8 +297,9 @@ export default function MainLayout() {
         </div>
       </div>
 
-      {/* Agent Builder Modal */}
+      {/* Modals */}
       <AgentBuilder isOpen={showAgentBuilder} onClose={() => setShowAgentBuilder(false)} />
+      <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   );
 }
