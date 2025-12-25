@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, Mic, Sparkles, RotateCcw, Copy, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Send, Paperclip, Mic, Sparkles, RotateCcw, Copy, ThumbsUp, ThumbsDown, StopCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Agent, Message } from '@/types/agent';
+import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 interface ChatUIProps {
   activeAgent: Agent;
 }
+
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
 export default function ChatUI({ activeAgent }: ChatUIProps) {
   const [messages, setMessages] = useState<Message[]>([
@@ -19,9 +22,11 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
     }
   ]);
   const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const { toast } = useToast();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -32,7 +37,6 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
   }, [messages]);
 
   useEffect(() => {
-    // Update welcome message when agent changes
     setMessages([{
       id: '1',
       role: 'assistant',
@@ -42,8 +46,16 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
     }]);
   }, [activeAgent]);
 
+  const stopStreaming = () => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+      setIsStreaming(false);
+    }
+  };
+
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || isStreaming) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -52,29 +64,123 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
       timestamp: new Date(),
     };
 
+    const currentInput = input;
     setMessages(prev => [...prev, userMessage]);
     setInput('');
-    setIsTyping(true);
+    setIsStreaming(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const responses = [
-        `I understand you want to ${input.toLowerCase()}. Let me analyze this using my ${activeAgent.tools[0]} capabilities...`,
-        `Great question! Using my integration with ${activeAgent.provider.toUpperCase()}, I can help you with that. Here's what I found...`,
-        `I'm processing your request through my ${activeAgent.tools.join(' and ')} tools. This will just take a moment...`,
-      ];
+    const controller = new AbortController();
+    setAbortController(controller);
 
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: responses[Math.floor(Math.random() * responses.length)],
-        timestamp: new Date(),
-        agentId: activeAgent.id,
+    // Prepare messages for API
+    const apiMessages = messages
+      .filter(m => m.role !== 'system')
+      .map(m => ({ role: m.role, content: m.content }));
+    apiMessages.push({ role: 'user', content: currentInput });
+
+    let assistantContent = '';
+
+    try {
+      const response = await fetch(CHAT_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ 
+          messages: apiMessages,
+          agentId: activeAgent.id,
+          agentName: activeAgent.name,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Request failed: ${response.status}`);
+      }
+
+      if (!response.body) throw new Error('No response body');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let textBuffer = '';
+
+      const updateAssistantMessage = (content: string) => {
+        assistantContent = content;
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last?.role === 'assistant' && !last.agentId) {
+            return prev.map((m, i) => 
+              i === prev.length - 1 ? { ...m, content: assistantContent } : m
+            );
+          }
+          return [...prev, {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant' as const,
+            content: assistantContent,
+            timestamp: new Date(),
+          }];
+        });
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
-      setIsTyping(false);
-    }, 1500);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        textBuffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = textBuffer.indexOf('\n')) !== -1) {
+          let line = textBuffer.slice(0, newlineIndex);
+          textBuffer = textBuffer.slice(newlineIndex + 1);
+
+          if (line.endsWith('\r')) line = line.slice(0, -1);
+          if (line.startsWith(':') || line.trim() === '') continue;
+          if (!line.startsWith('data: ')) continue;
+
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === '[DONE]') break;
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) {
+              updateAssistantMessage(assistantContent + content);
+            }
+          } catch {
+            textBuffer = line + '\n' + textBuffer;
+            break;
+          }
+        }
+      }
+
+      // Final update with agentId
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.role === 'assistant') {
+          return prev.map((m, i) => 
+            i === prev.length - 1 ? { ...m, agentId: activeAgent.id } : m
+          );
+        }
+        return prev;
+      });
+
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        console.log('Stream aborted');
+      } else {
+        console.error('Chat error:', error);
+        toast({
+          title: "Error",
+          description: (error as Error).message || "Failed to send message",
+          variant: "destructive"
+        });
+      }
+    } finally {
+      setIsStreaming(false);
+      setAbortController(null);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -82,6 +188,11 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const copyMessage = (content: string) => {
+    navigator.clipboard.writeText(content);
+    toast({ title: "Copied", description: "Message copied to clipboard" });
   };
 
   return (
@@ -97,7 +208,6 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
             )}
             style={{ animationDelay: `${index * 50}ms` }}
           >
-            {/* Avatar */}
             <div className={cn(
               "w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0",
               message.role === 'user'
@@ -107,13 +217,12 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
               {message.role === 'user' ? '👤' : activeAgent.avatar}
             </div>
 
-            {/* Message Content */}
             <div className={cn(
               "max-w-[80%] group",
               message.role === 'user' ? "items-end" : "items-start"
             )}>
               <div className={cn(
-                "rounded-2xl px-4 py-3 text-sm",
+                "rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap",
                 message.role === 'user'
                   ? "bg-primary text-primary-foreground rounded-br-md"
                   : "bg-secondary text-foreground rounded-bl-md"
@@ -121,10 +230,14 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
                 {message.content}
               </div>
 
-              {/* Message Actions */}
               {message.role === 'assistant' && (
                 <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button variant="ghost" size="icon-sm" className="h-6 w-6">
+                  <Button 
+                    variant="ghost" 
+                    size="icon-sm" 
+                    className="h-6 w-6"
+                    onClick={() => copyMessage(message.content)}
+                  >
                     <Copy className="h-3 w-3" />
                   </Button>
                   <Button variant="ghost" size="icon-sm" className="h-6 w-6">
@@ -146,8 +259,7 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
           </div>
         ))}
 
-        {/* Typing Indicator */}
-        {isTyping && (
+        {isStreaming && messages[messages.length - 1]?.role !== 'assistant' && (
           <div className="flex gap-3 animate-fade-in">
             <div className={cn(
               "w-8 h-8 rounded-lg flex items-center justify-center text-sm bg-gradient-to-br",
@@ -185,6 +297,7 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
               rows={1}
               className="w-full bg-transparent border-none outline-none resize-none text-foreground placeholder:text-muted-foreground text-sm py-2 px-2 max-h-32 scrollbar-thin"
               style={{ minHeight: '40px' }}
+              disabled={isStreaming}
             />
           </div>
 
@@ -192,19 +305,26 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
             <Button variant="ghost" size="icon">
               <Mic className="h-4 w-4" />
             </Button>
-            <Button
-              variant="neon"
-              size="icon"
-              onClick={handleSend}
-              disabled={!input.trim() || isTyping}
-              className="rounded-xl"
-            >
-              {isTyping ? (
-                <Sparkles className="h-4 w-4 animate-spin" />
-              ) : (
+            {isStreaming ? (
+              <Button
+                variant="destructive"
+                size="icon"
+                onClick={stopStreaming}
+                className="rounded-xl"
+              >
+                <StopCircle className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                variant="neon"
+                size="icon"
+                onClick={handleSend}
+                disabled={!input.trim()}
+                className="rounded-xl"
+              >
                 <Send className="h-4 w-4" />
-              )}
-            </Button>
+              </Button>
+            )}
           </div>
         </div>
 
