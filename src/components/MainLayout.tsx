@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Menu, X, PanelLeftClose, PanelLeft, Settings, 
   MessageSquare, Code, Eye, Terminal as TerminalIcon, Bot,
-  Copy, FolderOpen, LogOut, Sparkles, Search
+  Copy, FolderOpen, LogOut, Sparkles, Search, Globe, Mail, Map
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import AgentSelector from './AgentSelector';
@@ -19,12 +19,15 @@ import WebCloneTool from './WebCloneTool';
 import DeepResearchTool from './DeepResearchTool';
 import ToolSetupDialog from './ToolSetupDialog';
 import SidebarCreatePanel from './SidebarCreatePanel';
+import DNSManager from './DNSManager';
+import EmailManager from './EmailManager';
+import GoogleMapsManager from './GoogleMapsManager';
 import { defaultAgents } from '@/data/agents';
 import { Agent, Tool } from '@/types/agent';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
-type ActivePanel = 'chat' | 'code' | 'preview' | 'terminal' | 'clone' | 'research';
+type ActivePanel = 'chat' | 'code' | 'preview' | 'terminal' | 'clone' | 'research' | 'dns' | 'email' | 'maps';
 type SidebarTab = 'tools' | 'files';
 
 interface ExtendedAgent extends Agent {
@@ -37,7 +40,7 @@ export default function MainLayout() {
   const [activePanel, setActivePanel] = useState<ActivePanel>('chat');
   const [showAgentBuilder, setShowAgentBuilder] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [rightPanelMode, setRightPanelMode] = useState<'code' | 'preview' | 'split' | 'clone' | 'research'>('split');
+  const [rightPanelMode, setRightPanelMode] = useState<'code' | 'preview' | 'split' | 'clone' | 'research' | 'dns' | 'email' | 'maps'>('split');
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('tools');
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [clonedHtml, setClonedHtml] = useState<string>('');
@@ -77,6 +80,18 @@ export default function MainLayout() {
         setRightPanelMode('research');
         setActivePanel('research');
         return;
+      case 'dns':
+        setRightPanelMode('dns');
+        setActivePanel('dns');
+        return;
+      case 'email':
+        setRightPanelMode('email');
+        setActivePanel('email');
+        return;
+      case 'google-maps':
+        setRightPanelMode('maps');
+        setActivePanel('maps');
+        return;
       default:
         return;
     }
@@ -110,6 +125,9 @@ export default function MainLayout() {
     { id: 'preview' as const, icon: Eye, label: 'Preview' },
     { id: 'terminal' as const, icon: TerminalIcon, label: 'Terminal' },
     { id: 'research' as const, icon: Search, label: 'Research' },
+    { id: 'dns' as const, icon: Globe, label: 'DNS' },
+    { id: 'email' as const, icon: Mail, label: 'Email' },
+    { id: 'maps' as const, icon: Map, label: 'Maps' },
   ];
 
   if (loading) {
@@ -173,7 +191,7 @@ export default function MainLayout() {
         {/* Desktop Right Panel Mode */}
         <div className="hidden lg:flex items-center gap-3">
           <div className="flex items-center gap-0.5 bg-secondary/80 rounded-lg p-0.5 backdrop-blur-sm">
-            {['code', 'split', 'preview', 'clone', 'research'].map((mode) => (
+            {['code', 'split', 'preview', 'clone', 'research', 'dns', 'email', 'maps'].map((mode) => (
               <button
                 key={mode}
                 onClick={() => setRightPanelMode(mode as typeof rightPanelMode)}
@@ -319,6 +337,9 @@ export default function MainLayout() {
             {activePanel === 'terminal' && <TerminalComponent />}
             {activePanel === 'clone' && <WebCloneTool onCodeGenerated={handleCodeGenerated} />}
             {activePanel === 'research' && <DeepResearchTool />}
+            {activePanel === 'dns' && <DNSManager />}
+            {activePanel === 'email' && <EmailManager />}
+            {activePanel === 'maps' && <GoogleMapsManager />}
           </div>
 
           {/* Desktop: Show based on rightPanelMode */}
@@ -333,6 +354,9 @@ export default function MainLayout() {
             {rightPanelMode === 'preview' && <PreviewPane htmlContent={clonedHtml} />}
             {rightPanelMode === 'clone' && <WebCloneTool onCodeGenerated={handleCodeGenerated} />}
             {rightPanelMode === 'research' && <DeepResearchTool />}
+            {rightPanelMode === 'dns' && <DNSManager />}
+            {rightPanelMode === 'email' && <EmailManager />}
+            {rightPanelMode === 'maps' && <GoogleMapsManager />}
             {rightPanelMode === 'split' && (
               <div className="flex flex-col h-full">
                 <div className="flex-1 min-h-0">
