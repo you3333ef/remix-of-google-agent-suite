@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useMapsAgent, MapsAgentMessage } from '@/hooks/useMapsAgent';
+import { Loader2 as Spinner } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Place {
@@ -54,7 +55,8 @@ export default function GoogleMapsManager() {
   const directionsRendererRef = useRef<any>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   
-  const [apiKey, setApiKey] = useState<string>('');
+  const [isOAuthReady, setIsOAuthReady] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [geocodeLoading, setGeocodeLoading] = useState(false);
@@ -97,18 +99,32 @@ export default function GoogleMapsManager() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Auto-fetch API key from backend on mount
+  // Check OAuth status on mount
   useEffect(() => {
-    if (user) {
-      fetchApiKeyFromBackend();
-    }
+    const checkOAuthStatus = async () => {
+      if (!user) return;
+      
+      setIsCheckingAuth(true);
+      try {
+        const { data } = await supabase.functions.invoke('google-maps', {
+          body: { action: 'checkAuth', userId: user.id }
+        });
+        
+        setIsOAuthReady(data?.authenticated || false);
+        
+        if (data?.authenticated) {
+          loadGoogleMapsScript();
+        }
+      } catch (error) {
+        console.error('OAuth check failed:', error);
+        setIsOAuthReady(false);
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    };
+    
+    checkOAuthStatus();
   }, [user]);
-
-  useEffect(() => {
-    if (apiKey && !mapLoaded) {
-      loadGoogleMapsScript();
-    }
-  }, [apiKey]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -117,44 +133,19 @@ export default function GoogleMapsManager() {
     }
   }, [agentMessages]);
 
-  const fetchApiKeyFromBackend = async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke('google-maps', {
-        body: { action: 'getApiKey' }
-      });
-
-      if (error) throw error;
-      
-      const key = data?.data?.apiKey || data?.apiKey;
-      if (key) {
-        setApiKey(key);
-      } else {
-        toast({ 
-          title: "API Key Missing", 
-          description: "Google Maps API key not configured", 
-          variant: "destructive" 
-        });
-      }
-    } catch (error: any) {
-      console.error('Failed to fetch API key:', error);
-      toast({ 
-        title: "Error", 
-        description: "Failed to load Maps configuration", 
-        variant: "destructive" 
-      });
-    }
-  };
-
   const loadGoogleMapsScript = () => {
     if (window.google?.maps) {
       initializeMap();
       return;
     }
 
+    // Use a basic map without API key for display only
+    // All API calls go through OAuth-authenticated backend
     window.initMap = initializeMap;
     
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initMap`;
+    // Note: For production, you'd use Maps Embed API or configure OAuth for client-side
+    script.src = `https://maps.googleapis.com/maps/api/js?libraries=places&callback=initMap`;
     script.async = true;
     script.defer = true;
     document.head.appendChild(script);
@@ -223,7 +214,7 @@ export default function GoogleMapsManager() {
       const { data, error } = await supabase.functions.invoke('google-maps', {
         body: {
           action: 'search',
-          apiKey,
+          userId: user?.id,
           query: searchQuery,
           location: mapInstanceRef.current.getCenter().toJSON()
         }
@@ -301,7 +292,7 @@ export default function GoogleMapsManager() {
     setGeocodeLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('google-maps', {
-        body: { action: 'geocode', apiKey, address: addressInput }
+        body: { action: 'geocode', userId: user?.id, address: addressInput }
       });
 
       if (error) throw error;
@@ -351,7 +342,7 @@ export default function GoogleMapsManager() {
     setGeocodeLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('google-maps', {
-        body: { action: 'reverseGeocode', apiKey, lat, lng }
+        body: { action: 'reverseGeocode', userId: user?.id, lat, lng }
       });
 
       if (error) throw error;
@@ -389,7 +380,7 @@ export default function GoogleMapsManager() {
     
     try {
       const { data, error } = await supabase.functions.invoke('google-maps', {
-        body: { action: 'directions', apiKey, params: { origin: originInput, destination: destinationInput, mode: travelMode } }
+        body: { action: 'directions', userId: user?.id, params: { origin: originInput, destination: destinationInput, mode: travelMode } }
       });
 
       if (error) throw error;
@@ -552,14 +543,21 @@ export default function GoogleMapsManager() {
         </div>
       </div>
 
-      {!apiKey ? (
+      {isCheckingAuth ? (
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="flex items-center gap-3">
+            <Spinner className="h-5 w-5 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">جاري التحقق من المصادقة...</span>
+          </div>
+        </div>
+      ) : !isOAuthReady ? (
         <div className="flex-1 flex items-center justify-center p-4">
           <Card className="border-amber-500/30 bg-amber-500/5 max-w-sm">
             <CardContent className="p-4 flex items-center gap-3">
               <AlertCircle className="h-6 w-6 text-amber-500 shrink-0" />
               <div>
-                <h3 className="font-semibold text-sm">API Key Required</h3>
-                <p className="text-xs text-muted-foreground">Configure Google Maps API Key in Settings</p>
+                <h3 className="font-semibold text-sm">مطلوب تسجيل الدخول</h3>
+                <p className="text-xs text-muted-foreground">يرجى تسجيل الدخول باستخدام Google للوصول للخرائط</p>
               </div>
             </CardContent>
           </Card>

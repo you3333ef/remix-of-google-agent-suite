@@ -24,21 +24,52 @@ export interface UseMapsAgentReturn {
   sendMessage: (content: string) => Promise<void>;
   clearMessages: () => void;
   isReady: boolean;
+  isAuthenticated: boolean;
 }
 
 export function useMapsAgent(): UseMapsAgentReturn {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { toast } = useToast();
   const [messages, setMessages] = useState<MapsAgentMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Auto-initialize when user is available
+  // Check OAuth status when user is available
   useEffect(() => {
-    if (user) {
-      setIsReady(true);
-      console.log('[MapsAgent] Ready for user:', user.id);
-    }
+    const checkAuth = async () => {
+      if (!user) {
+        setIsReady(false);
+        setIsAuthenticated(false);
+        return;
+      }
+
+      try {
+        // Check if user has valid OAuth tokens
+        const { data, error } = await supabase.functions.invoke('google-maps', {
+          body: { 
+            action: 'checkAuth',
+            userId: user.id
+          },
+        });
+
+        if (error) {
+          console.error('[MapsAgent] Auth check error:', error);
+          setIsAuthenticated(false);
+        } else {
+          setIsAuthenticated(data?.authenticated || false);
+          console.log('[MapsAgent] OAuth status:', data?.authenticated ? 'Ready' : 'Not configured');
+        }
+        
+        setIsReady(true);
+      } catch (err) {
+        console.error('[MapsAgent] Auth check failed:', err);
+        setIsAuthenticated(false);
+        setIsReady(true);
+      }
+    };
+
+    checkAuth();
   }, [user]);
 
   const sendMessage = useCallback(async (content: string) => {
@@ -73,10 +104,11 @@ export function useMapsAgent(): UseMapsAgentReturn {
       
       conversationHistory.push({ role: 'user', content: content.trim() });
 
-      // Call the maps-agent edge function
+      // Call the maps-agent edge function with user ID for OAuth
       const { data, error } = await supabase.functions.invoke('maps-agent', {
         body: {
           messages: conversationHistory,
+          userId: user.id, // Pass user ID for OAuth token lookup
         },
       });
 
@@ -120,8 +152,15 @@ export function useMapsAgent(): UseMapsAgentReturn {
           description: 'AI credits depleted. Please add funds.',
           variant: 'destructive',
         });
-      } else if (error.message?.includes('GOOGLE_MAPS_API_KEY')) {
-        errorMessage = 'Google Maps API is not configured. Please contact the administrator.';
+      } else if (error.message?.includes('OAuth') || error.message?.includes('re-authenticate')) {
+        errorMessage = 'جلسة Google منتهية. يرجى تسجيل الدخول مرة أخرى.';
+        toast({
+          title: 'مطلوب إعادة المصادقة',
+          description: 'يرجى تسجيل الخروج وإعادة تسجيل الدخول باستخدام Google',
+          variant: 'destructive',
+        });
+      } else if (error.message?.includes('authentication required')) {
+        errorMessage = 'يرجى تسجيل الدخول باستخدام حساب Google للمتابعة.';
       }
       
       setMessages((prev) =>
@@ -150,5 +189,6 @@ export function useMapsAgent(): UseMapsAgentReturn {
     sendMessage,
     clearMessages,
     isReady,
+    isAuthenticated,
   };
 }

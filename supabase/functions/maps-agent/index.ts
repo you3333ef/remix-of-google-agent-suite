@@ -137,12 +137,15 @@ You help users with location-based tasks like:
 - Calculating distances between locations
 - Getting detailed place information
 
+IMPORTANT: You use the user's authenticated Google account to access Maps APIs.
+No API keys are needed - all requests are authenticated via OAuth 2.0.
+
 ALWAYS use the available tools to provide accurate, real-time information.
 Be helpful, concise, and provide actionable results.
 Format responses clearly with relevant emojis and bullet points.
 If the user's location is needed but not provided, ask for it.`;
 
-async function executeMapsTool(toolName: string, args: Record<string, any>, mapsApiKey: string): Promise<any> {
+async function executeMapsTool(toolName: string, args: Record<string, any>, userId: string): Promise<any> {
   console.log(`[MapsAgent] Executing tool: ${toolName}`, args);
   
   const actionMap: Record<string, string> = {
@@ -157,7 +160,7 @@ async function executeMapsTool(toolName: string, args: Record<string, any>, maps
 
   const action = actionMap[toolName] || toolName;
   
-  // Call google-maps edge function internally
+  // Call google-maps edge function internally with user ID for OAuth
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   
@@ -169,6 +172,7 @@ async function executeMapsTool(toolName: string, args: Record<string, any>, maps
     },
     body: JSON.stringify({
       action,
+      userId, // Pass user ID for OAuth token lookup
       ...args,
       params: args,
     }),
@@ -275,20 +279,51 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, stream = false } = await req.json();
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Get user from auth header
+    const authHeader = req.headers.get('Authorization');
+    let userId: string | null = null;
+
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      
+      // Check if it's a user JWT (not service role)
+      if (token !== supabaseKey) {
+        const { data: { user } } = await supabase.auth.getUser(token);
+        userId = user?.id || null;
+      }
+    }
+
+    const { messages, userId: bodyUserId, stream = false } = await req.json();
     
+    // Use userId from body if not in header
+    userId = userId || bodyUserId || null;
+    
+    if (!userId) {
+      throw new Error('User authentication required. Please sign in with Google.');
+    }
+
+    // Verify user has valid OAuth token
+    const { data: tokenData } = await supabase
+      .from('user_google_tokens')
+      .select('access_token, expires_at')
+      .eq('user_id', userId)
+      .single();
+
+    if (!tokenData?.access_token) {
+      throw new Error('Google OAuth not configured. Please re-authenticate with Google.');
+    }
+
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
     
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
-    
-    if (!GOOGLE_MAPS_API_KEY) {
-      throw new Error('GOOGLE_MAPS_API_KEY is not configured. Please contact administrator.');
-    }
 
-    console.log('[MapsAgent] Processing request with', messages.length, 'messages');
+    console.log('[MapsAgent] Processing request for user:', userId, 'with', messages.length, 'messages');
 
     // Initial LLM call with tools
     const llmResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -348,7 +383,7 @@ serve(async (req) => {
       );
     }
 
-    // Execute tool calls
+    // Execute tool calls with user's OAuth token
     const toolResults: any[] = [];
     
     for (const toolCall of toolCalls) {
@@ -362,7 +397,7 @@ serve(async (req) => {
       }
       
       try {
-        const result = await executeMapsTool(toolName, args, GOOGLE_MAPS_API_KEY);
+        const result = await executeMapsTool(toolName, args, userId);
         const formattedResult = formatToolResult(toolName, result);
         
         toolResults.push({
@@ -428,7 +463,7 @@ serve(async (req) => {
     const finalData = await finalResponse.json();
     const finalContent = finalData.choices?.[0]?.message?.content || '';
 
-    console.log('[MapsAgent] Request completed successfully');
+    console.log('[MapsAgent] Request completed successfully for user:', userId);
 
     return new Response(
       JSON.stringify({

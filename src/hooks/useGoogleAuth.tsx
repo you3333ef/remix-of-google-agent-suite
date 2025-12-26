@@ -10,6 +10,14 @@ interface UseGoogleAuthReturn {
   isSettingUp: boolean;
 }
 
+// Google Maps OAuth scopes - no API key needed
+const GOOGLE_MAPS_SCOPES = [
+  'email',
+  'profile',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile',
+].join(' ');
+
 export function useGoogleAuth(): UseGoogleAuthReturn {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingUp, setIsSettingUp] = useState(false);
@@ -31,6 +39,7 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
 
       setIsSettingUp(true);
       console.log('[GoogleAuth] Starting automatic OAuth setup...');
+      console.log('[GoogleAuth] Provider token available:', !!session.provider_token);
 
       try {
         // Call the OAuth callback edge function
@@ -40,7 +49,7 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
             access_token: session.provider_token,
             refresh_token: session.provider_refresh_token,
             expires_in: session.expires_in,
-            scope: 'email profile',
+            scope: GOOGLE_MAPS_SCOPES,
           },
         });
 
@@ -58,8 +67,8 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
           // Auto-redirect to maps with conversation
           if (data?.conversation_id) {
             toast({
-              title: "Welcome!",
-              description: "Your Maps session is ready",
+              title: "مرحباً! 👋",
+              description: "جاهز للبدء! جميع خدمات الخرائط تعمل عبر حسابك",
             });
             navigate(`/maps?conversation=${data.conversation_id}`);
           } else {
@@ -79,22 +88,25 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
   const signInWithGoogle = useCallback(async () => {
     setIsProcessing(true);
     try {
+      console.log('[GoogleAuth] Initiating Google OAuth sign-in...');
+      console.log('[GoogleAuth] Scopes:', GOOGLE_MAPS_SCOPES);
+      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/auth`,
           queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
+            access_type: 'offline', // Required for refresh_token
+            prompt: 'consent', // Force consent to get refresh_token
           },
-          scopes: 'email profile',
+          scopes: GOOGLE_MAPS_SCOPES,
         },
       });
 
       if (error) {
         console.error('[GoogleAuth] OAuth error:', error);
         toast({
-          title: "Authentication Failed",
+          title: "فشل المصادقة",
           description: error.message,
           variant: "destructive",
         });
@@ -102,8 +114,8 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
     } catch (err) {
       console.error('[GoogleAuth] Sign in error:', err);
       toast({
-        title: "Error",
-        description: "Failed to initiate Google sign-in",
+        title: "خطأ",
+        description: "فشل بدء تسجيل الدخول باستخدام Google",
         variant: "destructive",
       });
     } finally {
