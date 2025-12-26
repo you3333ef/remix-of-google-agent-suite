@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Globe, Plus, Trash2, Edit2, RefreshCw, Save, X, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Globe, Plus, Trash2, RefreshCw, Save, X, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -26,7 +26,6 @@ export default function DNSManager() {
   const [loading, setLoading] = useState(false);
   const [apiKey, setApiKey] = useState<string>('');
   const [zoneId, setZoneId] = useState<string>('');
-  const [editingRecord, setEditingRecord] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newRecord, setNewRecord] = useState({
     type: 'A',
@@ -173,15 +172,15 @@ export default function DNSManager() {
 
   return (
     <div className="h-full flex flex-col bg-background">
-      <div className="p-4 border-b border-border/60">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Globe className="h-5 w-5 text-primary" />
+      <div className="p-3 sm:p-4 border-b border-border/60">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-primary/10">
+              <Globe className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
             </div>
             <div>
-              <h2 className="font-semibold">DNS Manager</h2>
-              <p className="text-sm text-muted-foreground">Manage Cloudflare DNS records</p>
+              <h2 className="text-sm sm:text-base font-semibold">DNS Manager</h2>
+              <p className="text-xs sm:text-sm text-muted-foreground">Manage Cloudflare DNS records</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -190,30 +189,32 @@ export default function DNSManager() {
               size="sm"
               onClick={fetchRecords}
               disabled={loading || !isConfigured}
+              className="text-xs sm:text-sm h-8 sm:h-9"
             >
-              <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
-              Refresh
+              <RefreshCw className={cn("h-3 w-3 sm:h-4 sm:w-4 mr-1.5 sm:mr-2", loading && "animate-spin")} />
+              <span className="hidden sm:inline">Refresh</span>
             </Button>
             <Button
               size="sm"
               onClick={() => setShowAddForm(true)}
               disabled={!isConfigured}
+              className="text-xs sm:text-sm h-8 sm:h-9"
             >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Record
+              <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+              Add
             </Button>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4 space-y-4">
+      <div className="flex-1 overflow-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
         {!isConfigured ? (
           <Card className="border-amber-500/30 bg-amber-500/5">
-            <CardContent className="p-6 flex items-center gap-4">
-              <AlertCircle className="h-8 w-8 text-amber-500" />
+            <CardContent className="p-4 sm:p-6 flex items-center gap-3 sm:gap-4">
+              <AlertCircle className="h-6 w-6 sm:h-8 sm:w-8 text-amber-500 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold">Configuration Required</h3>
-                <p className="text-sm text-muted-foreground">
+                <h3 className="text-sm sm:text-base font-semibold">Configuration Required</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   Please configure your Cloudflare API Key and Zone ID in Settings → Integrations
                 </p>
               </div>
@@ -223,60 +224,61 @@ export default function DNSManager() {
           <>
             {showAddForm && (
               <Card className="border-primary/30">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Add New Record</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Type</label>
+                <CardContent className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+                  <h3 className="text-sm sm:text-base font-medium">Add New Record</h3>
+                  <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                    <div className="space-y-1.5 sm:space-y-2">
+                      <label className="text-xs sm:text-sm font-medium">Type</label>
                       <Select
                         value={newRecord.type}
                         onValueChange={(v) => setNewRecord({ ...newRecord, type: v })}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="h-8 sm:h-10 text-xs sm:text-sm">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           {recordTypes.map((type) => (
-                            <SelectItem key={type} value={type}>{type}</SelectItem>
+                            <SelectItem key={type} value={type} className="text-xs sm:text-sm">{type}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">TTL</label>
+                    <div className="space-y-1.5 sm:space-y-2">
+                      <label className="text-xs sm:text-sm font-medium">TTL</label>
                       <Input
                         type="number"
                         value={newRecord.ttl}
                         onChange={(e) => setNewRecord({ ...newRecord, ttl: parseInt(e.target.value) })}
+                        className="h-8 sm:h-10 text-xs sm:text-sm"
                       />
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Name</label>
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <label className="text-xs sm:text-sm font-medium">Name</label>
                     <Input
                       placeholder="e.g., www or @"
                       value={newRecord.name}
                       onChange={(e) => setNewRecord({ ...newRecord, name: e.target.value })}
+                      className="h-8 sm:h-10 text-xs sm:text-sm"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Content</label>
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <label className="text-xs sm:text-sm font-medium">Content</label>
                     <Input
                       placeholder="e.g., 192.168.1.1"
                       value={newRecord.content}
                       onChange={(e) => setNewRecord({ ...newRecord, content: e.target.value })}
+                      className="h-8 sm:h-10 text-xs sm:text-sm"
                     />
                   </div>
                   <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setShowAddForm(false)}>
-                      <X className="h-4 w-4 mr-2" />
+                    <Button variant="outline" onClick={() => setShowAddForm(false)} size="sm" className="text-xs sm:text-sm h-8 sm:h-9">
+                      <X className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5" />
                       Cancel
                     </Button>
-                    <Button onClick={createRecord} disabled={loading}>
-                      <Save className="h-4 w-4 mr-2" />
-                      Create Record
+                    <Button onClick={createRecord} disabled={loading} size="sm" className="text-xs sm:text-sm h-8 sm:h-9">
+                      <Save className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5" />
+                      Create
                     </Button>
                   </div>
                 </CardContent>
@@ -284,10 +286,10 @@ export default function DNSManager() {
             )}
 
             {records.length === 0 ? (
-              <div className="text-center py-12">
-                <Globe className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                <h3 className="font-semibold mb-2">No Records Found</h3>
-                <p className="text-sm text-muted-foreground mb-4">
+              <div className="text-center py-8 sm:py-12">
+                <Globe className="h-10 w-10 sm:h-12 sm:w-12 mx-auto text-muted-foreground/50 mb-3 sm:mb-4" />
+                <h3 className="text-sm sm:text-base font-semibold mb-2">No Records Found</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground mb-4">
                   Click "Refresh" to load DNS records or add a new one
                 </p>
               </div>
@@ -295,22 +297,22 @@ export default function DNSManager() {
               <div className="space-y-2">
                 {records.map((record) => (
                   <Card key={record.id} className="hover:border-primary/30 transition-colors">
-                    <CardContent className="p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <Badge variant="outline" className="font-mono">
+                    <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
+                      <div className="flex items-center gap-2 sm:gap-4">
+                        <Badge variant="outline" className="font-mono text-xs">
                           {record.type}
                         </Badge>
-                        <div>
-                          <p className="font-medium">{record.name}</p>
-                          <p className="text-sm text-muted-foreground font-mono">{record.content}</p>
+                        <div className="min-w-0">
+                          <p className="text-xs sm:text-sm font-medium truncate">{record.name}</p>
+                          <p className="text-xs text-muted-foreground font-mono truncate">{record.content}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Badge variant="secondary" className="text-xs">
                           TTL: {record.ttl}
                         </Badge>
                         {record.proxied && (
-                          <Badge className="bg-orange-500/20 text-orange-500 border-orange-500/30">
+                          <Badge className="bg-orange-500/20 text-orange-500 border-orange-500/30 text-xs">
                             Proxied
                           </Badge>
                         )}
@@ -318,9 +320,9 @@ export default function DNSManager() {
                           variant="ghost"
                           size="icon"
                           onClick={() => deleteRecord(record.id)}
-                          className="text-destructive hover:text-destructive"
+                          className="text-destructive hover:text-destructive h-7 w-7 sm:h-8 sm:w-8"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                         </Button>
                       </div>
                     </CardContent>

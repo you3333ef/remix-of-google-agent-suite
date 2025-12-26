@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Mail, Send, Paperclip, X, Users, FileText, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { Mail, Send, Users, FileText, AlertCircle, CheckCircle2, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
@@ -154,34 +154,34 @@ export default function EmailManager() {
 
   return (
     <div className="h-full flex flex-col bg-background">
-      <div className="p-4 border-b border-border/60">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Mail className="h-5 w-5 text-primary" />
+      <div className="p-3 sm:p-4 border-b border-border/60">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="p-1.5 sm:p-2 rounded-lg bg-primary/10">
+            <Mail className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
           </div>
           <div>
-            <h2 className="font-semibold">Email Manager</h2>
-            <p className="text-sm text-muted-foreground">Compose and send emails via SMTP</p>
+            <h2 className="text-sm sm:text-base font-semibold">Email Manager</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground">Compose and send emails via SMTP</p>
           </div>
         </div>
       </div>
 
       <div className="flex-1 overflow-auto">
         <Tabs defaultValue="compose" className="h-full flex flex-col">
-          <TabsList className="mx-4 mt-4 w-fit">
-            <TabsTrigger value="compose">Compose</TabsTrigger>
-            <TabsTrigger value="templates">Templates</TabsTrigger>
-            <TabsTrigger value="history">History</TabsTrigger>
+          <TabsList className="mx-3 sm:mx-4 mt-3 sm:mt-4 w-fit">
+            <TabsTrigger value="compose" className="text-xs sm:text-sm px-2 sm:px-3">Compose</TabsTrigger>
+            <TabsTrigger value="templates" className="text-xs sm:text-sm px-2 sm:px-3">Templates</TabsTrigger>
+            <TabsTrigger value="history" className="text-xs sm:text-sm px-2 sm:px-3">History</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="compose" className="flex-1 p-4 space-y-4">
+          <TabsContent value="compose" className="flex-1 p-3 sm:p-4 space-y-3 sm:space-y-4">
             {!smtpConfigured ? (
               <Card className="border-amber-500/30 bg-amber-500/5">
-                <CardContent className="p-6 flex items-center gap-4">
-                  <AlertCircle className="h-8 w-8 text-amber-500" />
+                <CardContent className="p-4 sm:p-6 flex items-center gap-3 sm:gap-4">
+                  <AlertCircle className="h-6 w-6 sm:h-8 sm:w-8 text-amber-500 flex-shrink-0" />
                   <div>
-                    <h3 className="font-semibold">SMTP Configuration Required</h3>
-                    <p className="text-sm text-muted-foreground">
+                    <h3 className="text-sm sm:text-base font-semibold">SMTP Configuration Required</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground">
                       Please configure your SMTP settings in Settings → Integrations
                     </p>
                   </div>
@@ -189,76 +189,80 @@ export default function EmailManager() {
               </Card>
             ) : (
               <Card>
-                <CardContent className="p-4 space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium flex items-center gap-2">
-                      <Users className="h-4 w-4" />
+                <CardContent className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <label className="text-xs sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2">
+                      <Users className="h-3 w-3 sm:h-4 sm:w-4" />
                       To
                     </label>
                     <Input
-                      placeholder="recipient@example.com (comma-separated for multiple)"
+                      placeholder="recipient@example.com"
                       value={draft.to}
                       onChange={(e) => setDraft({ ...draft, to: e.target.value })}
+                      className="h-8 sm:h-10 text-xs sm:text-sm"
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">CC</label>
+                  <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                    <div className="space-y-1.5 sm:space-y-2">
+                      <label className="text-xs sm:text-sm font-medium">CC</label>
                       <Input
                         placeholder="cc@example.com"
                         value={draft.cc}
                         onChange={(e) => setDraft({ ...draft, cc: e.target.value })}
+                        className="h-8 sm:h-10 text-xs sm:text-sm"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">BCC</label>
+                    <div className="space-y-1.5 sm:space-y-2">
+                      <label className="text-xs sm:text-sm font-medium">BCC</label>
                       <Input
                         placeholder="bcc@example.com"
                         value={draft.bcc}
                         onChange={(e) => setDraft({ ...draft, bcc: e.target.value })}
+                        className="h-8 sm:h-10 text-xs sm:text-sm"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <label className="text-xs sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2">
+                      <FileText className="h-3 w-3 sm:h-4 sm:w-4" />
                       Subject
                     </label>
                     <Input
                       placeholder="Email subject"
                       value={draft.subject}
                       onChange={(e) => setDraft({ ...draft, subject: e.target.value })}
+                      className="h-8 sm:h-10 text-xs sm:text-sm"
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Message</label>
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <label className="text-xs sm:text-sm font-medium">Message</label>
                     <Textarea
                       placeholder="Write your message here..."
-                      className="min-h-[200px] resize-none"
+                      className="min-h-[120px] sm:min-h-[200px] resize-none text-xs sm:text-sm"
                       value={draft.body}
                       onChange={(e) => setDraft({ ...draft, body: e.target.value })}
                     />
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-2 text-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <label className="flex items-center gap-2 text-xs sm:text-sm">
                       <input
                         type="checkbox"
                         checked={draft.isHtml}
                         onChange={(e) => setDraft({ ...draft, isHtml: e.target.checked })}
-                        className="rounded border-border"
+                        className="rounded border-border w-3.5 h-3.5 sm:w-4 sm:h-4"
                       />
                       Send as HTML
                     </label>
 
-                    <Button onClick={sendEmail} disabled={sending}>
+                    <Button onClick={sendEmail} disabled={sending} size="sm" className="text-xs sm:text-sm h-8 sm:h-10 self-end sm:self-auto">
                       {sending ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5 sm:mr-2 animate-spin" />
                       ) : (
-                        <Send className="h-4 w-4 mr-2" />
+                        <Send className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
                       )}
                       Send Email
                     </Button>
@@ -268,47 +272,47 @@ export default function EmailManager() {
             )}
           </TabsContent>
 
-          <TabsContent value="templates" className="flex-1 p-4 space-y-3">
+          <TabsContent value="templates" className="flex-1 p-3 sm:p-4 space-y-2 sm:space-y-3">
             {templates.map((template, i) => (
               <Card
                 key={i}
                 className="cursor-pointer hover:border-primary/30 transition-colors"
                 onClick={() => setDraft({ ...draft, subject: template.subject, body: template.body })}
               >
-                <CardContent className="p-4">
-                  <h3 className="font-medium mb-1">{template.name}</h3>
-                  <p className="text-sm text-muted-foreground">{template.subject}</p>
-                  <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{template.body}</p>
+                <CardContent className="p-3 sm:p-4">
+                  <h3 className="text-xs sm:text-sm font-medium mb-1">{template.name}</h3>
+                  <p className="text-xs text-muted-foreground">{template.subject}</p>
+                  <p className="text-xs text-muted-foreground mt-1.5 sm:mt-2 line-clamp-2">{template.body}</p>
                 </CardContent>
               </Card>
             ))}
           </TabsContent>
 
-          <TabsContent value="history" className="flex-1 p-4 space-y-3">
+          <TabsContent value="history" className="flex-1 p-3 sm:p-4 space-y-2 sm:space-y-3">
             {sentEmails.length === 0 ? (
-              <div className="text-center py-12">
-                <Mail className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                <h3 className="font-semibold mb-2">No Emails Sent</h3>
-                <p className="text-sm text-muted-foreground">
+              <div className="text-center py-8 sm:py-12">
+                <Mail className="h-10 w-10 sm:h-12 sm:w-12 mx-auto text-muted-foreground/50 mb-3 sm:mb-4" />
+                <h3 className="text-sm sm:text-base font-semibold mb-2">No Emails Sent</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   Your sent emails will appear here
                 </p>
               </div>
             ) : (
               sentEmails.map((email) => (
                 <Card key={email.id}>
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">{email.subject}</p>
-                      <p className="text-sm text-muted-foreground">To: {email.to}</p>
+                  <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
+                    <div className="min-w-0">
+                      <p className="text-xs sm:text-sm font-medium truncate">{email.subject}</p>
+                      <p className="text-xs text-muted-foreground truncate">To: {email.to}</p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(email.sentAt).toLocaleString()}
                       </p>
                     </div>
-                    <Badge variant={email.status === 'sent' ? 'default' : 'destructive'}>
+                    <Badge variant={email.status === 'sent' ? 'default' : 'destructive'} className="self-start sm:self-auto text-xs">
                       {email.status === 'sent' ? (
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        <CheckCircle2 className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-1" />
                       ) : (
-                        <X className="h-3 w-3 mr-1" />
+                        <X className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-1" />
                       )}
                       {email.status}
                     </Badge>
