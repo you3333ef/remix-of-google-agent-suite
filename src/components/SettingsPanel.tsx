@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Settings, Palette, Key, User, Moon, Sun, Monitor, Save, Trash2, ExternalLink, Check, Bot } from 'lucide-react';
+import { X, Settings, Palette, Key, User, Moon, Sun, Monitor, Save, Trash2, ExternalLink, Check, Bot, Plug, Mail, MapPin, BarChart3, Cloud, Globe, Shield, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -16,7 +16,17 @@ interface SettingsPanelProps {
 }
 
 type Theme = 'dark' | 'light' | 'system';
-type Tab = 'profile' | 'theme' | 'ai-providers';
+type Tab = 'profile' | 'theme' | 'ai-providers' | 'integrations';
+
+interface IntegrationKey {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  placeholder: string;
+  docsUrl: string;
+  description: string;
+  fields?: { id: string; label: string; placeholder: string; type?: string }[];
+}
 
 export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('ai-providers');
@@ -104,8 +114,85 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
   const tabs = [
     { id: 'ai-providers' as const, icon: Bot, label: 'AI Providers' },
+    { id: 'integrations' as const, icon: Plug, label: 'Integrations' },
     { id: 'profile' as const, icon: User, label: 'Profile' },
     { id: 'theme' as const, icon: Palette, label: 'Appearance' },
+  ];
+
+  const integrationKeys: IntegrationKey[] = [
+    {
+      id: 'google_maps',
+      label: 'Google Maps',
+      icon: <MapPin className="h-4 w-4 text-red-500" />,
+      placeholder: 'AIzaSy...',
+      docsUrl: 'https://console.cloud.google.com/apis/credentials',
+      description: 'Enable interactive maps and location services',
+      fields: [
+        { id: 'google_maps_api_key', label: 'API Key', placeholder: 'AIzaSy...' }
+      ]
+    },
+    {
+      id: 'google_analytics',
+      label: 'Google Analytics',
+      icon: <BarChart3 className="h-4 w-4 text-yellow-500" />,
+      placeholder: 'G-XXXXXXXXXX',
+      docsUrl: 'https://analytics.google.com/',
+      description: 'Track website traffic and user behavior',
+      fields: [
+        { id: 'google_analytics_id', label: 'Measurement ID', placeholder: 'G-XXXXXXXXXX' }
+      ]
+    },
+    {
+      id: 'smtp',
+      label: 'Email (SMTP)',
+      icon: <Mail className="h-4 w-4 text-blue-500" />,
+      placeholder: 'smtp.gmail.com',
+      docsUrl: 'https://support.google.com/mail/answer/7126229',
+      description: 'Send and receive emails',
+      fields: [
+        { id: 'smtp_host', label: 'SMTP Host', placeholder: 'smtp.gmail.com' },
+        { id: 'smtp_port', label: 'SMTP Port', placeholder: '587' },
+        { id: 'smtp_user', label: 'Username', placeholder: 'your-email@gmail.com' },
+        { id: 'smtp_pass', label: 'Password', placeholder: '••••••••', type: 'password' }
+      ]
+    },
+    {
+      id: 'cloudflare',
+      label: 'Cloudflare DNS',
+      icon: <Cloud className="h-4 w-4 text-orange-500" />,
+      placeholder: 'Your API Key',
+      docsUrl: 'https://dash.cloudflare.com/profile/api-tokens',
+      description: 'Manage DNS records and domains',
+      fields: [
+        { id: 'cloudflare_api_key', label: 'API Key', placeholder: 'Your global API key' },
+        { id: 'cloudflare_zone_id', label: 'Zone ID', placeholder: 'Zone ID from dashboard' }
+      ]
+    },
+    {
+      id: 'google_ads',
+      label: 'Google Ads',
+      icon: <Zap className="h-4 w-4 text-green-500" />,
+      placeholder: 'Your Developer Token',
+      docsUrl: 'https://ads.google.com/',
+      description: 'Manage advertising campaigns',
+      fields: [
+        { id: 'google_ads_developer_token', label: 'Developer Token', placeholder: 'Developer token' },
+        { id: 'google_ads_client_id', label: 'Client ID', placeholder: 'OAuth Client ID' },
+        { id: 'google_ads_client_secret', label: 'Client Secret', placeholder: 'OAuth Client Secret', type: 'password' }
+      ]
+    },
+    {
+      id: 'google_search_console',
+      label: 'Search Console',
+      icon: <Globe className="h-4 w-4 text-purple-500" />,
+      placeholder: 'OAuth credentials',
+      docsUrl: 'https://search.google.com/search-console',
+      description: 'Monitor search performance',
+      fields: [
+        { id: 'google_search_console_client_id', label: 'Client ID', placeholder: 'OAuth Client ID' },
+        { id: 'google_search_console_client_secret', label: 'Client Secret', placeholder: 'OAuth Client Secret', type: 'password' }
+      ]
+    }
   ];
 
   const themeOptions = [
@@ -301,6 +388,89 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                     <Trash2 className="h-4 w-4" />
                     Sign Out
                   </Button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'integrations' && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-sm font-medium mb-1">External Services</h3>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Configure API keys for external services. Keys are stored securely in your account.
+                  </p>
+                </div>
+
+                <div className="space-y-6">
+                  {integrationKeys.map(integration => {
+                    const hasAnyValue = integration.fields?.some(f => apiKeys[f.id]);
+                    return (
+                      <div 
+                        key={integration.id} 
+                        className={cn(
+                          "p-4 rounded-xl border transition-all duration-200",
+                          hasAnyValue 
+                            ? "bg-primary/5 border-primary/30" 
+                            : "bg-secondary/30 border-border/60"
+                        )}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-secondary/50 flex items-center justify-center">
+                              {integration.icon}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium">{integration.label}</span>
+                                {hasAnyValue && (
+                                  <span className="flex items-center gap-1 text-xs text-neon-green">
+                                    <Check className="h-3 w-3" />
+                                    Active
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground">{integration.description}</p>
+                            </div>
+                          </div>
+                          <a 
+                            href={integration.docsUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-xs text-primary hover:underline flex items-center gap-1"
+                          >
+                            Get Key <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          {integration.fields?.map(field => (
+                            <div key={field.id} className="space-y-1">
+                              <label className="text-xs text-muted-foreground">{field.label}</label>
+                              <Input
+                                type={field.type || 'text'}
+                                value={apiKeys[field.id] || ''}
+                                onChange={(e) => updateApiKey(field.id, e.target.value)}
+                                placeholder={field.placeholder}
+                                className="bg-background/50 border-border font-mono text-sm h-9"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="p-4 rounded-xl bg-accent/10 border border-accent/20">
+                  <div className="flex items-start gap-3">
+                    <Shield className="h-5 w-5 text-accent mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-medium text-accent">Security Note</h4>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        All API keys are encrypted and stored securely. They are only used for the specific services you enable and are never shared.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
