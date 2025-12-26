@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { X, Settings, Palette, Key, User, Moon, Sun, Monitor, Save, Trash2 } from 'lucide-react';
+import { X, Settings, Palette, Key, User, Moon, Sun, Monitor, Save, Trash2, ExternalLink, Check, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
+import { aiProviders, defaultProvider, defaultModel } from '@/data/aiProviders';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -14,17 +16,15 @@ interface SettingsPanelProps {
 }
 
 type Theme = 'dark' | 'light' | 'system';
-type Tab = 'profile' | 'theme' | 'api-keys';
+type Tab = 'profile' | 'theme' | 'ai-providers';
 
 export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
-  const [activeTab, setActiveTab] = useState<Tab>('profile');
+  const [activeTab, setActiveTab] = useState<Tab>('ai-providers');
   const [theme, setTheme] = useState<Theme>('dark');
   const [displayName, setDisplayName] = useState('');
-  const [apiKeys, setApiKeys] = useState<Record<string, string>>({
-    openai: '',
-    anthropic: '',
-    google: '',
-  });
+  const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
+  const [selectedProvider, setSelectedProvider] = useState(defaultProvider);
+  const [selectedModel, setSelectedModel] = useState(defaultModel);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
   const { user, signOut } = useAuth();
@@ -38,7 +38,6 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const loadSettings = async () => {
     if (!user) return;
 
-    // Load profile
     const { data: profile } = await supabase
       .from('profiles')
       .select('display_name')
@@ -49,17 +48,22 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       setDisplayName(profile.display_name || '');
     }
 
-    // Load settings
     const { data: settings } = await supabase
       .from('user_settings')
-      .select('theme, api_keys')
+      .select('theme, api_keys, preferred_ai_provider, preferred_agent')
       .eq('user_id', user.id)
       .single();
 
     if (settings) {
       setTheme((settings.theme as Theme) || 'dark');
       if (settings.api_keys && typeof settings.api_keys === 'object') {
-        setApiKeys(prev => ({ ...prev, ...(settings.api_keys as Record<string, string>) }));
+        setApiKeys(settings.api_keys as Record<string, string>);
+      }
+      if (settings.preferred_ai_provider) {
+        setSelectedProvider(settings.preferred_ai_provider);
+      }
+      if (settings.preferred_agent) {
+        setSelectedModel(settings.preferred_agent);
       }
     }
   };
@@ -69,18 +73,18 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setSaving(true);
 
     try {
-      // Update profile
       await supabase
         .from('profiles')
         .update({ display_name: displayName })
         .eq('id', user.id);
 
-      // Update settings
       await supabase
         .from('user_settings')
         .update({ 
           theme, 
-          api_keys: apiKeys 
+          api_keys: apiKeys,
+          preferred_ai_provider: selectedProvider,
+          preferred_agent: selectedModel,
         })
         .eq('user_id', user.id);
 
@@ -92,10 +96,16 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     }
   };
 
+  const updateApiKey = (providerId: string, value: string) => {
+    setApiKeys(prev => ({ ...prev, [providerId]: value }));
+  };
+
+  const currentProvider = aiProviders.find(p => p.id === selectedProvider);
+
   const tabs = [
+    { id: 'ai-providers' as const, icon: Bot, label: 'AI Providers' },
     { id: 'profile' as const, icon: User, label: 'Profile' },
     { id: 'theme' as const, icon: Palette, label: 'Appearance' },
-    { id: 'api-keys' as const, icon: Key, label: 'API Keys' },
   ];
 
   const themeOptions = [
@@ -108,16 +118,16 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-2xl glass-panel max-h-[90vh] overflow-hidden flex flex-col animate-scale-in">
+      <div className="w-full max-w-3xl glass-panel max-h-[90vh] overflow-hidden flex flex-col animate-scale-in">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
+        <div className="flex items-center justify-between p-4 border-b border-border/60">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
               <Settings className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-foreground">Settings</h2>
-              <p className="text-sm text-muted-foreground">Manage your preferences</p>
+              <h2 className="text-lg font-display font-semibold text-foreground">Settings</h2>
+              <p className="text-sm text-muted-foreground">Manage your AI providers and preferences</p>
             </div>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
@@ -127,7 +137,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar */}
-          <div className="w-48 border-r border-border p-2 space-y-1">
+          <div className="w-48 border-r border-border/60 p-2 space-y-1 bg-card/30">
             {tabs.map(tab => {
               const Icon = tab.icon;
               return (
@@ -135,10 +145,10 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors",
+                    "w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm transition-all duration-200",
                     activeTab === tab.id
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                      ? "bg-primary/15 text-primary font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                   )}
                 >
                   <Icon className="h-4 w-4" />
@@ -150,6 +160,120 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin">
+            {activeTab === 'ai-providers' && (
+              <div className="space-y-6">
+                {/* Default Provider Selection */}
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-medium mb-1">Default AI Provider</h3>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Select your preferred AI provider. Lovable AI works without an API key.
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {aiProviders.map(provider => (
+                      <button
+                        key={provider.id}
+                        onClick={() => {
+                          setSelectedProvider(provider.id);
+                          setSelectedModel(provider.models[0]?.id || '');
+                        }}
+                        className={cn(
+                          "flex items-center gap-2 p-3 rounded-xl text-left transition-all duration-200",
+                          selectedProvider === provider.id
+                            ? "bg-primary/15 border-2 border-primary"
+                            : "bg-secondary/50 border-2 border-transparent hover:border-border"
+                        )}
+                      >
+                        <span className="text-xl">{provider.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{provider.name}</div>
+                          {selectedProvider === provider.id && (
+                            <Check className="h-3 w-3 text-primary inline" />
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Model Selection */}
+                {currentProvider && (
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="text-sm font-medium mb-1">Default Model</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Choose the AI model to use by default
+                      </p>
+                    </div>
+                    <Select value={selectedModel} onValueChange={setSelectedModel}>
+                      <SelectTrigger className="bg-secondary/50 border-border">
+                        <SelectValue placeholder="Select a model" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-border">
+                        {currentProvider.models.map(model => (
+                          <SelectItem key={model.id} value={model.id}>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{model.name}</span>
+                              <span className="text-xs text-muted-foreground">- {model.description}</span>
+                              {model.contextWindow && (
+                                <span className="text-xs text-primary/70 ml-auto">{model.contextWindow}</span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* API Keys */}
+                <div className="space-y-4 pt-4 border-t border-border/60">
+                  <div>
+                    <h3 className="text-sm font-medium mb-1">API Keys</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Add your API keys to use your own accounts. Keys are stored securely.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    {aiProviders.filter(p => p.id !== 'lovable').map(provider => (
+                      <div key={provider.id} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span>{provider.icon}</span>
+                            <label className="text-sm font-medium">{provider.name}</label>
+                          </div>
+                          <a 
+                            href={provider.docsUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-xs text-primary hover:underline flex items-center gap-1"
+                          >
+                            Docs <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                        <Input
+                          type="password"
+                          value={apiKeys[provider.id] || ''}
+                          onChange={(e) => updateApiKey(provider.id, e.target.value)}
+                          placeholder={provider.apiKeyPlaceholder}
+                          className="bg-secondary/50 border-border font-mono text-sm"
+                        />
+                        {apiKeys[provider.id] && (
+                          <div className="flex items-center gap-1 text-xs text-neon-green">
+                            <Check className="h-3 w-3" />
+                            Key configured
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'profile' && (
               <div className="space-y-4">
                 <div>
@@ -165,12 +289,13 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                         value={displayName}
                         onChange={(e) => setDisplayName(e.target.value)}
                         placeholder="Your name"
+                        className="bg-secondary/50"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-border">
+                <div className="pt-4 border-t border-border/60">
                   <h3 className="text-sm font-medium mb-3 text-destructive">Danger Zone</h3>
                   <Button variant="destructive" onClick={signOut} className="gap-2">
                     <Trash2 className="h-4 w-4" />
@@ -192,10 +317,10 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                           key={option.id}
                           onClick={() => setTheme(option.id)}
                           className={cn(
-                            "flex flex-col items-center gap-2 p-4 rounded-xl transition-colors",
+                            "flex flex-col items-center gap-2 p-4 rounded-xl transition-all duration-200",
                             theme === option.id
-                              ? "bg-primary/20 border border-primary"
-                              : "bg-secondary hover:bg-secondary/80 border border-transparent"
+                              ? "bg-primary/20 border-2 border-primary"
+                              : "bg-secondary/50 border-2 border-transparent hover:border-border"
                           )}
                         >
                           <Icon className="h-6 w-6" />
@@ -206,16 +331,16 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                   </div>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-3 pt-4">
                   <h3 className="text-sm font-medium">Preferences</h3>
-                  <div className="flex items-center justify-between py-2">
+                  <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-secondary/30">
                     <div>
                       <div className="text-sm">Animations</div>
                       <div className="text-xs text-muted-foreground">Enable motion effects</div>
                     </div>
                     <Switch defaultChecked />
                   </div>
-                  <div className="flex items-center justify-between py-2">
+                  <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-secondary/30">
                     <div>
                       <div className="text-sm">Sound Effects</div>
                       <div className="text-xs text-muted-foreground">Play sounds on actions</div>
@@ -225,52 +350,11 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 </div>
               </div>
             )}
-
-            {activeTab === 'api-keys' && (
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-sm font-medium mb-1">API Keys</h3>
-                  <p className="text-xs text-muted-foreground mb-4">
-                    Add your own API keys to use custom AI providers. Keys are stored securely.
-                  </p>
-                  
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-sm text-muted-foreground">OpenAI API Key</label>
-                      <Input
-                        type="password"
-                        value={apiKeys.openai}
-                        onChange={(e) => setApiKeys(prev => ({ ...prev, openai: e.target.value }))}
-                        placeholder="sk-..."
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm text-muted-foreground">Anthropic API Key</label>
-                      <Input
-                        type="password"
-                        value={apiKeys.anthropic}
-                        onChange={(e) => setApiKeys(prev => ({ ...prev, anthropic: e.target.value }))}
-                        placeholder="sk-ant-..."
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm text-muted-foreground">Google AI API Key</label>
-                      <Input
-                        type="password"
-                        value={apiKeys.google}
-                        onChange={(e) => setApiKeys(prev => ({ ...prev, google: e.target.value }))}
-                        placeholder="AIza..."
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end p-4 border-t border-border bg-secondary/30">
+        <div className="flex items-center justify-end p-4 border-t border-border/60 bg-card/30">
           <Button variant="ghost" onClick={onClose} className="mr-2">
             Cancel
           </Button>
