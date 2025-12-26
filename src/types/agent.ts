@@ -23,6 +23,8 @@ export interface Tool {
   description: string;
   icon: string;
   category: ToolCategory;
+  status: 'ready' | 'needs_setup' | 'coming_soon';
+  setupKey?: string; // اسم المفتاح المطلوب للإعداد
 }
 
 export type ToolCategory = 
