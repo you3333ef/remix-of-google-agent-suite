@@ -59,8 +59,9 @@ serve(async (req) => {
       .from("maps_conversations")
       .select("id")
       .eq("user_id", user_id)
+      .order("created_at", { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     let conversationId = existingConversation?.id;
 
@@ -82,14 +83,16 @@ serve(async (req) => {
         conversationId = newConversation?.id;
         console.log("Created new maps conversation:", conversationId);
       }
+    } else {
+      console.log("Using existing conversation:", conversationId);
     }
 
-    // 4. Ensure user has a profile
+    // 4. Ensure user has a profile (will be created by trigger if not exists)
     const { data: profile } = await supabase
       .from("profiles")
       .select("id")
       .eq("id", user_id)
-      .single();
+      .maybeSingle();
 
     if (!profile) {
       // Profile will be created by the handle_new_user trigger
