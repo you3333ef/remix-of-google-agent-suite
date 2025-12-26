@@ -1,15 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Map, MapPin, Search, Navigation, Layers, AlertCircle, Loader2, MapPinned, ArrowRightLeft, Copy, CheckCircle2, Route, Car, Footprints, Train, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Map, MapPin, Search, Navigation, Layers, AlertCircle, Loader2, MapPinned, ArrowRightLeft, Copy, CheckCircle2, Route, Car, Footprints, Train, Clock, ChevronDown, ChevronUp, MessageSquare, Send, Bot, User, Sparkles, X, Menu, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { useMapsAgent, MapsAgentMessage } from '@/hooks/useMapsAgent';
 import { cn } from '@/lib/utils';
 
 interface Place {
@@ -18,6 +21,8 @@ interface Place {
   lat: number;
   lng: number;
   placeId?: string;
+  rating?: number;
+  userRatingsTotal?: number;
 }
 
 interface GeocodingResult {
@@ -47,6 +52,8 @@ export default function GoogleMapsManager() {
   const markersRef = useRef<any[]>([]);
   const geocodeMarkerRef = useRef<any>(null);
   const directionsRendererRef = useRef<any>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  
   const [apiKey, setApiKey] = useState<string>('');
   const [mapLoaded, setMapLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -56,8 +63,9 @@ export default function GoogleMapsManager() {
   const [places, setPlaces] = useState<Place[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [mapType, setMapType] = useState('roadmap');
-  const [activeTab, setActiveTab] = useState('search');
+  const [activeTab, setActiveTab] = useState('agent');
   const [showSidebar, setShowSidebar] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
   
   // Geocoding states
   const [addressInput, setAddressInput] = useState('');
@@ -74,8 +82,20 @@ export default function GoogleMapsManager() {
   const [directionsResult, setDirectionsResult] = useState<DirectionsResult | null>(null);
   const [showSteps, setShowSteps] = useState(false);
   
+  // Agent chat states
+  const [agentInput, setAgentInput] = useState('');
+  const { messages, isProcessing, sendMessage, clearMessages, initializeAgent } = useMapsAgent();
+  
   const { user } = useAuth();
   const { toast } = useToast();
+
+  // Responsive handling
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -86,8 +106,16 @@ export default function GoogleMapsManager() {
   useEffect(() => {
     if (apiKey && !mapLoaded) {
       loadGoogleMapsScript();
+      initializeAgent(apiKey);
     }
-  }, [apiKey]);
+  }, [apiKey, initializeAgent]);
+
+  // Auto-scroll chat
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [messages]);
 
   const loadApiKey = async () => {
     if (!user) return;
@@ -138,7 +166,6 @@ export default function GoogleMapsManager() {
 
     mapInstanceRef.current = map;
     
-    // Initialize directions renderer
     directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
       map,
       suppressMarkers: false,
@@ -154,10 +181,7 @@ export default function GoogleMapsManager() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          const pos = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          };
+          const pos = { lat: position.coords.latitude, lng: position.coords.longitude };
           map.setCenter(pos);
           new window.google.maps.Marker({
             position: pos,
@@ -173,9 +197,7 @@ export default function GoogleMapsManager() {
             title: 'Your Location'
           });
         },
-        () => {
-          console.log('Geolocation failed');
-        }
+        () => console.log('Geolocation failed')
       );
     }
   }, [mapType]);
@@ -203,7 +225,9 @@ export default function GoogleMapsManager() {
           address: p.formatted_address || p.vicinity,
           lat: p.geometry.location.lat,
           lng: p.geometry.location.lng,
-          placeId: p.place_id
+          placeId: p.place_id,
+          rating: p.rating,
+          userRatingsTotal: p.user_ratings_total
         })));
 
         markersRef.current.forEach(m => m.setMap(null));
@@ -211,10 +235,7 @@ export default function GoogleMapsManager() {
 
         results.forEach((place: any) => {
           const marker = new window.google.maps.Marker({
-            position: {
-              lat: place.geometry.location.lat,
-              lng: place.geometry.location.lng
-            },
+            position: { lat: place.geometry.location.lat, lng: place.geometry.location.lng },
             map: mapInstanceRef.current,
             title: place.name
           });
@@ -223,21 +244,12 @@ export default function GoogleMapsManager() {
 
         if (results.length > 0) {
           const bounds = new window.google.maps.LatLngBounds();
-          results.forEach((p: any) => {
-            bounds.extend({
-              lat: p.geometry.location.lat,
-              lng: p.geometry.location.lng
-            });
-          });
+          results.forEach((p: any) => bounds.extend({ lat: p.geometry.location.lat, lng: p.geometry.location.lng }));
           mapInstanceRef.current.fitBounds(bounds);
         }
       }
     } catch (error: any) {
-      toast({
-        title: "Search Failed",
-        description: error.message || "Could not search places",
-        variant: "destructive"
-      });
+      toast({ title: "Search Failed", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -261,10 +273,7 @@ export default function GoogleMapsManager() {
   const goToMyLocation = () => {
     if (navigator.geolocation && mapInstanceRef.current) {
       navigator.geolocation.getCurrentPosition((position) => {
-        const pos = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude
-        };
+        const pos = { lat: position.coords.latitude, lng: position.coords.longitude };
         mapInstanceRef.current.setCenter(pos);
         mapInstanceRef.current.setZoom(15);
         setReverseLatitude(pos.lat.toFixed(6));
@@ -279,11 +288,7 @@ export default function GoogleMapsManager() {
     setGeocodeLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('google-maps', {
-        body: {
-          action: 'geocode',
-          apiKey,
-          address: addressInput
-        }
+        body: { action: 'geocode', apiKey, address: addressInput }
       });
 
       if (error) throw error;
@@ -299,10 +304,7 @@ export default function GoogleMapsManager() {
         setGeocodeResult(result);
         
         if (mapInstanceRef.current) {
-          if (geocodeMarkerRef.current) {
-            geocodeMarkerRef.current.setMap(null);
-          }
-          
+          if (geocodeMarkerRef.current) geocodeMarkerRef.current.setMap(null);
           mapInstanceRef.current.setCenter({ lat: result.lat, lng: result.lng });
           mapInstanceRef.current.setZoom(16);
           
@@ -310,34 +312,13 @@ export default function GoogleMapsManager() {
             position: { lat: result.lat, lng: result.lng },
             map: mapInstanceRef.current,
             title: result.formattedAddress,
-            icon: {
-              path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-              scale: 6,
-              fillColor: '#22c55e',
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 2
-            }
+            icon: { path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW, scale: 6, fillColor: '#22c55e', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 }
           });
         }
-
-        toast({
-          title: "Geocoding Success",
-          description: `Found: ${result.formattedAddress}`
-        });
-      } else {
-        toast({
-          title: "Not Found",
-          description: resultData?.message || "Could not find location for this address",
-          variant: "destructive"
-        });
+        toast({ title: "Geocoding Success", description: `Found: ${result.formattedAddress}` });
       }
     } catch (error: any) {
-      toast({
-        title: "Geocoding Failed",
-        description: error.message || "Could not geocode address",
-        variant: "destructive"
-      });
+      toast({ title: "Geocoding Failed", description: error.message, variant: "destructive" });
     } finally {
       setGeocodeLoading(false);
     }
@@ -350,23 +331,14 @@ export default function GoogleMapsManager() {
     const lng = parseFloat(reverseLongitude);
     
     if (isNaN(lat) || isNaN(lng)) {
-      toast({
-        title: "Invalid Coordinates",
-        description: "Please enter valid latitude and longitude values",
-        variant: "destructive"
-      });
+      toast({ title: "Invalid Coordinates", description: "Please enter valid values", variant: "destructive" });
       return;
     }
 
     setGeocodeLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('google-maps', {
-        body: {
-          action: 'reverseGeocode',
-          apiKey,
-          lat,
-          lng
-        }
+        body: { action: 'reverseGeocode', apiKey, lat, lng }
       });
 
       if (error) throw error;
@@ -376,10 +348,7 @@ export default function GoogleMapsManager() {
         setReverseResult(resultData.formattedAddress);
         
         if (mapInstanceRef.current) {
-          if (geocodeMarkerRef.current) {
-            geocodeMarkerRef.current.setMap(null);
-          }
-          
+          if (geocodeMarkerRef.current) geocodeMarkerRef.current.setMap(null);
           mapInstanceRef.current.setCenter({ lat, lng });
           mapInstanceRef.current.setZoom(16);
           
@@ -387,34 +356,13 @@ export default function GoogleMapsManager() {
             position: { lat, lng },
             map: mapInstanceRef.current,
             title: resultData.formattedAddress,
-            icon: {
-              path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-              scale: 6,
-              fillColor: '#3b82f6',
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 2
-            }
+            icon: { path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW, scale: 6, fillColor: '#3b82f6', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 }
           });
         }
-
-        toast({
-          title: "Reverse Geocoding Success",
-          description: resultData.formattedAddress
-        });
-      } else {
-        toast({
-          title: "Not Found",
-          description: resultData?.message || "Could not find address for these coordinates",
-          variant: "destructive"
-        });
+        toast({ title: "Success", description: resultData.formattedAddress });
       }
     } catch (error: any) {
-      toast({
-        title: "Reverse Geocoding Failed",
-        description: error.message || "Could not reverse geocode coordinates",
-        variant: "destructive"
-      });
+      toast({ title: "Failed", description: error.message, variant: "destructive" });
     } finally {
       setGeocodeLoading(false);
     }
@@ -428,23 +376,14 @@ export default function GoogleMapsManager() {
     
     try {
       const { data, error } = await supabase.functions.invoke('google-maps', {
-        body: {
-          action: 'directions',
-          apiKey,
-          params: {
-            origin: originInput,
-            destination: destinationInput,
-            mode: travelMode
-          }
-        }
+        body: { action: 'directions', apiKey, params: { origin: originInput, destination: destinationInput, mode: travelMode } }
       });
 
       if (error) throw error;
 
       const resultData = data?.data || data;
-      if (resultData?.routes && resultData.routes.length > 0) {
-        const route = resultData.routes[0];
-        const leg = route.legs[0];
+      if (resultData?.routes?.[0]?.legs?.[0]) {
+        const leg = resultData.routes[0].legs[0];
         
         const result: DirectionsResult = {
           distance: leg.distance.text,
@@ -454,42 +393,24 @@ export default function GoogleMapsManager() {
             distance: step.distance.text,
             duration: step.duration.text
           })),
-          polyline: route.overview_polyline?.points
+          polyline: resultData.routes[0].overview_polyline?.points
         };
         
         setDirectionsResult(result);
         
-        // Draw route on map
         if (mapInstanceRef.current && directionsRendererRef.current) {
           const directionsService = new window.google.maps.DirectionsService();
-          directionsService.route({
-            origin: originInput,
-            destination: destinationInput,
-            travelMode: travelMode.toUpperCase()
-          }, (response: any, status: any) => {
-            if (status === 'OK') {
-              directionsRendererRef.current.setDirections(response);
+          directionsService.route(
+            { origin: originInput, destination: destinationInput, travelMode: travelMode.toUpperCase() },
+            (response: any, status: any) => {
+              if (status === 'OK') directionsRendererRef.current.setDirections(response);
             }
-          });
+          );
         }
-
-        toast({
-          title: "Route Found",
-          description: `${result.distance} - ${result.duration}`
-        });
-      } else {
-        toast({
-          title: "No Route Found",
-          description: resultData?.status || "Could not find a route between these locations",
-          variant: "destructive"
-        });
+        toast({ title: "Route Found", description: `${result.distance} - ${result.duration}` });
       }
     } catch (error: any) {
-      toast({
-        title: "Directions Failed",
-        description: error.message || "Could not get directions",
-        variant: "destructive"
-      });
+      toast({ title: "Directions Failed", description: error.message, variant: "destructive" });
     } finally {
       setDirectionsLoading(false);
     }
@@ -505,7 +426,7 @@ export default function GoogleMapsManager() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((position) => {
         setOriginInput(`${position.coords.latitude}, ${position.coords.longitude}`);
-        toast({ title: "Location Set", description: "Using your current location as origin" });
+        toast({ title: "Location Set", description: "Using current location" });
       });
     }
   };
@@ -517,6 +438,15 @@ export default function GoogleMapsManager() {
     toast({ title: "Copied", description: "Copied to clipboard" });
   };
 
+  const handleAgentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!agentInput.trim() || isProcessing) return;
+    
+    const input = agentInput;
+    setAgentInput('');
+    await sendMessage(input);
+  };
+
   const TravelModeIcon = ({ mode }: { mode: string }) => {
     switch (mode) {
       case 'driving': return <Car className="h-3.5 w-3.5" />;
@@ -526,43 +456,76 @@ export default function GoogleMapsManager() {
     }
   };
 
+  const AgentMessageBubble = ({ message }: { message: MapsAgentMessage }) => {
+    const isUser = message.role === 'user';
+    
+    return (
+      <div className={cn("flex gap-2 mb-3", isUser ? "flex-row-reverse" : "flex-row")}>
+        <div className={cn(
+          "w-7 h-7 rounded-full flex items-center justify-center shrink-0",
+          isUser ? "bg-primary" : "bg-gradient-to-br from-emerald-500 to-cyan-500"
+        )}>
+          {isUser ? <User className="h-3.5 w-3.5 text-primary-foreground" /> : <Bot className="h-3.5 w-3.5 text-white" />}
+        </div>
+        <div className={cn(
+          "max-w-[85%] rounded-lg px-3 py-2 text-xs",
+          isUser ? "bg-primary text-primary-foreground" : "bg-muted"
+        )}>
+          {message.isStreaming && message.steps && message.steps.length > 0 && (
+            <div className="mb-2 space-y-1">
+              {message.steps.filter(s => s.type !== 'answer').map((step, i) => (
+                <div key={i} className="flex items-center gap-1.5 text-muted-foreground">
+                  {step.type === 'think' && <Sparkles className="h-3 w-3 text-yellow-500" />}
+                  {step.type === 'act' && <Loader2 className="h-3 w-3 animate-spin text-blue-500" />}
+                  {step.type === 'observe' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+                  <span className="text-[10px]">{step.type}: {step.content.substring(0, 50)}...</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="whitespace-pre-wrap">{message.content || (message.isStreaming ? '...' : '')}</div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="h-full flex flex-col bg-background">
       {/* Header */}
-      <div className="p-3 md:p-4 border-b border-border/60">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Map className="h-4 w-4 md:h-5 md:w-5 text-primary" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-sm md:text-base">Google Maps</h2>
-              <p className="text-xs text-muted-foreground hidden sm:block">Interactive maps, geocoding & directions</p>
-            </div>
-          </div>
+      <div className="p-2 md:p-3 border-b border-border/60">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
-              size="sm"
-              className="md:hidden"
+              size="icon"
+              className="h-8 w-8 md:hidden"
               onClick={() => setShowSidebar(!showSidebar)}
             >
-              {showSidebar ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              {showSidebar ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             </Button>
+            <div className="p-1.5 rounded-lg bg-primary/10">
+              <Map className="h-4 w-4 text-primary" />
+            </div>
+            <div className="hidden sm:block">
+              <h2 className="font-semibold text-sm">Google Maps Agent</h2>
+              <p className="text-[10px] text-muted-foreground">AI-powered maps assistant</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
             <Select value={mapType} onValueChange={changeMapType}>
-              <SelectTrigger className="w-24 md:w-32 h-8 text-xs md:text-sm">
-                <Layers className="h-3.5 w-3.5 mr-1.5" />
+              <SelectTrigger className="w-20 md:w-28 h-7 text-[10px] md:text-xs">
+                <Layers className="h-3 w-3 mr-1" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="roadmap">Roadmap</SelectItem>
+                <SelectItem value="roadmap">Road</SelectItem>
                 <SelectItem value="satellite">Satellite</SelectItem>
                 <SelectItem value="hybrid">Hybrid</SelectItem>
                 <SelectItem value="terrain">Terrain</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={goToMyLocation}>
-              <Navigation className="h-3.5 w-3.5" />
+            <Button variant="outline" size="icon" className="h-7 w-7" onClick={goToMyLocation}>
+              <Navigation className="h-3 w-3" />
             </Button>
           </div>
         </div>
@@ -570,14 +533,12 @@ export default function GoogleMapsManager() {
 
       {!apiKey ? (
         <div className="flex-1 flex items-center justify-center p-4">
-          <Card className="border-amber-500/30 bg-amber-500/5 max-w-md">
-            <CardContent className="p-4 md:p-6 flex items-center gap-4">
-              <AlertCircle className="h-6 w-6 md:h-8 md:w-8 text-amber-500 flex-shrink-0" />
+          <Card className="border-amber-500/30 bg-amber-500/5 max-w-sm">
+            <CardContent className="p-4 flex items-center gap-3">
+              <AlertCircle className="h-6 w-6 text-amber-500 shrink-0" />
               <div>
-                <h3 className="font-semibold text-sm md:text-base">API Key Required</h3>
-                <p className="text-xs md:text-sm text-muted-foreground">
-                  Please configure your Google Maps API Key in Settings → Integrations
-                </p>
+                <h3 className="font-semibold text-sm">API Key Required</h3>
+                <p className="text-xs text-muted-foreground">Configure Google Maps API Key in Settings</p>
               </div>
             </CardContent>
           </Card>
@@ -586,42 +547,105 @@ export default function GoogleMapsManager() {
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
           {/* Sidebar */}
           <div className={cn(
-            "border-b md:border-b-0 md:border-r border-border/60 flex flex-col transition-all duration-300",
-            showSidebar ? "h-[45vh] md:h-auto md:w-72 lg:w-80" : "h-0 md:h-auto md:w-72 lg:w-80 overflow-hidden md:overflow-visible"
+            "border-b md:border-b-0 md:border-r border-border/60 flex flex-col transition-all duration-300 bg-background z-10",
+            showSidebar 
+              ? "h-[50vh] md:h-auto md:w-72 lg:w-80" 
+              : "h-0 md:h-auto md:w-72 lg:w-80 overflow-hidden md:overflow-visible",
+            isMobile && showSidebar && "absolute inset-x-0 top-[52px] bottom-0 h-auto"
           )}>
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-              <TabsList className="mx-2 mt-2 grid grid-cols-4 h-8">
-                <TabsTrigger value="search" className="text-xs px-1.5">
-                  <Search className="h-3 w-3 md:mr-1" />
-                  <span className="hidden md:inline">Search</span>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+              <TabsList className="mx-2 mt-2 grid grid-cols-5 h-8">
+                <TabsTrigger value="agent" className="text-[10px] px-1">
+                  <Bot className="h-3 w-3" />
                 </TabsTrigger>
-                <TabsTrigger value="directions" className="text-xs px-1.5">
-                  <Route className="h-3 w-3 md:mr-1" />
-                  <span className="hidden md:inline">Route</span>
+                <TabsTrigger value="search" className="text-[10px] px-1">
+                  <Search className="h-3 w-3" />
                 </TabsTrigger>
-                <TabsTrigger value="geocode" className="text-xs px-1.5">
-                  <MapPinned className="h-3 w-3 md:mr-1" />
-                  <span className="hidden md:inline">Geo</span>
+                <TabsTrigger value="directions" className="text-[10px] px-1">
+                  <Route className="h-3 w-3" />
                 </TabsTrigger>
-                <TabsTrigger value="reverse" className="text-xs px-1.5">
-                  <ArrowRightLeft className="h-3 w-3 md:mr-1" />
-                  <span className="hidden md:inline">Rev</span>
+                <TabsTrigger value="geocode" className="text-[10px] px-1">
+                  <MapPinned className="h-3 w-3" />
+                </TabsTrigger>
+                <TabsTrigger value="reverse" className="text-[10px] px-1">
+                  <ArrowRightLeft className="h-3 w-3" />
                 </TabsTrigger>
               </TabsList>
 
+              {/* Agent Tab */}
+              <TabsContent value="agent" className="flex-1 flex flex-col mt-0 data-[state=inactive]:hidden min-h-0">
+                <div className="p-2 border-b border-border/60">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                      <span className="text-xs font-medium">Maps Agent</span>
+                    </div>
+                    {messages.length > 0 && (
+                      <Button variant="ghost" size="sm" onClick={clearMessages} className="h-6 px-2 text-[10px]">
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                
+                <ScrollArea className="flex-1 p-2" ref={chatScrollRef}>
+                  {messages.length === 0 ? (
+                    <div className="text-center py-6 space-y-3">
+                      <div className="w-12 h-12 mx-auto rounded-full bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 flex items-center justify-center">
+                        <Bot className="h-6 w-6 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium">Maps Agent Ready</p>
+                        <p className="text-[10px] text-muted-foreground mt-1">Ask me to find places, get directions, or geocode addresses</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        {["Find coffee shops near me", "Directions to Times Square", "Coordinates of Eiffel Tower"].map((q, i) => (
+                          <Button
+                            key={i}
+                            variant="outline"
+                            size="sm"
+                            className="w-full h-7 text-[10px] justify-start"
+                            onClick={() => setAgentInput(q)}
+                          >
+                            {q}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    messages.map((msg) => <AgentMessageBubble key={msg.id} message={msg} />)
+                  )}
+                </ScrollArea>
+                
+                <form onSubmit={handleAgentSubmit} className="p-2 border-t border-border/60">
+                  <div className="flex gap-1.5">
+                    <Input
+                      value={agentInput}
+                      onChange={(e) => setAgentInput(e.target.value)}
+                      placeholder="Ask the Maps Agent..."
+                      className="h-8 text-xs"
+                      disabled={isProcessing}
+                    />
+                    <Button type="submit" size="icon" className="h-8 w-8 shrink-0" disabled={isProcessing || !agentInput.trim()}>
+                      {isProcessing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                    </Button>
+                  </div>
+                </form>
+              </TabsContent>
+
               {/* Search Tab */}
-              <TabsContent value="search" className="flex-1 flex flex-col mt-0 data-[state=inactive]:hidden">
-                <div className="p-3 border-b border-border/60">
-                  <div className="flex gap-2">
+              <TabsContent value="search" className="flex-1 flex flex-col mt-0 data-[state=inactive]:hidden min-h-0">
+                <div className="p-2 border-b border-border/60">
+                  <div className="flex gap-1.5">
                     <Input
                       placeholder="Search places..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && searchPlaces()}
-                      className="h-9 text-sm"
+                      className="h-8 text-xs"
                     />
-                    <Button onClick={searchPlaces} disabled={loading} size="sm" className="h-9 px-3">
-                      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                    <Button onClick={searchPlaces} disabled={loading} size="icon" className="h-8 w-8 shrink-0">
+                      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
                     </Button>
                   </div>
                 </div>
@@ -629,28 +653,34 @@ export default function GoogleMapsManager() {
                 <ScrollArea className="flex-1 p-2">
                   {places.length === 0 ? (
                     <div className="text-center py-6">
-                      <MapPin className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
-                      <p className="text-xs text-muted-foreground">Search for places</p>
+                      <MapPin className="h-6 w-6 mx-auto text-muted-foreground/50 mb-2" />
+                      <p className="text-[10px] text-muted-foreground">Search for places</p>
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       {places.map((place, i) => (
                         <Card
                           key={i}
                           className={cn(
                             "cursor-pointer transition-colors",
-                            selectedPlace?.placeId === place.placeId
-                              ? "border-primary bg-primary/5"
-                              : "hover:border-primary/30"
+                            selectedPlace?.placeId === place.placeId ? "border-primary bg-primary/5" : "hover:border-primary/30"
                           )}
                           onClick={() => selectPlace(place)}
                         >
-                          <CardContent className="p-2.5">
+                          <CardContent className="p-2">
                             <div className="flex items-start gap-2">
-                              <MapPin className="h-3.5 w-3.5 text-primary mt-0.5 flex-shrink-0" />
-                              <div className="min-w-0">
-                                <p className="font-medium text-xs truncate">{place.name}</p>
-                                <p className="text-xs text-muted-foreground line-clamp-1">{place.address}</p>
+                              <MapPin className="h-3 w-3 text-primary mt-0.5 shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-[10px] truncate">{place.name}</p>
+                                <p className="text-[10px] text-muted-foreground truncate">{place.address}</p>
+                                {place.rating && (
+                                  <div className="flex items-center gap-1 mt-0.5">
+                                    <span className="text-[10px] text-yellow-500">★ {place.rating}</span>
+                                    {place.userRatingsTotal && (
+                                      <span className="text-[10px] text-muted-foreground">({place.userRatingsTotal})</span>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </CardContent>
@@ -662,44 +692,32 @@ export default function GoogleMapsManager() {
               </TabsContent>
 
               {/* Directions Tab */}
-              <TabsContent value="directions" className="flex-1 flex flex-col mt-0 p-3 space-y-3 data-[state=inactive]:hidden overflow-auto">
-                <div className="space-y-1">
-                  <Label className="flex items-center gap-2 text-xs">
-                    <Route className="h-3.5 w-3.5" />
-                    Get Directions
-                  </Label>
-                </div>
-
-                <div className="space-y-2">
+              <TabsContent value="directions" className="flex-1 flex flex-col mt-0 p-2 space-y-2 data-[state=inactive]:hidden overflow-auto">
+                <div className="space-y-1.5">
                   <div className="relative">
                     <Input
-                      placeholder="Origin (e.g., New York, NY)"
+                      placeholder="Origin"
                       value={originInput}
                       onChange={(e) => setOriginInput(e.target.value)}
-                      className="h-9 text-xs pr-8"
+                      className="h-8 text-xs pr-8"
                     />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-0 top-0 h-9 w-8"
-                      onClick={useMyLocationAsOrigin}
-                    >
+                    <Button variant="ghost" size="icon" className="absolute right-0 top-0 h-8 w-8" onClick={useMyLocationAsOrigin}>
                       <Navigation className="h-3 w-3" />
                     </Button>
                   </div>
                   
                   <div className="flex justify-center">
-                    <Button variant="ghost" size="sm" onClick={swapLocations} className="h-6 px-2">
+                    <Button variant="ghost" size="sm" onClick={swapLocations} className="h-5 px-2">
                       <ArrowRightLeft className="h-3 w-3 rotate-90" />
                     </Button>
                   </div>
                   
                   <Input
-                    placeholder="Destination (e.g., Boston, MA)"
+                    placeholder="Destination"
                     value={destinationInput}
                     onChange={(e) => setDestinationInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && getDirections()}
-                    className="h-9 text-xs"
+                    className="h-8 text-xs"
                   />
                 </div>
 
@@ -710,65 +728,49 @@ export default function GoogleMapsManager() {
                       variant={travelMode === mode ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => setTravelMode(mode)}
-                      className="flex-1 h-8 text-xs capitalize"
+                      className="flex-1 h-7 text-[10px]"
                     >
                       <TravelModeIcon mode={mode} />
-                      <span className="ml-1 hidden sm:inline">{mode}</span>
                     </Button>
                   ))}
                 </div>
 
-                <Button 
-                  onClick={getDirections} 
-                  disabled={directionsLoading || !originInput || !destinationInput} 
-                  className="w-full h-9 text-xs"
-                >
-                  {directionsLoading ? (
-                    <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
-                  ) : (
-                    <Route className="h-3.5 w-3.5 mr-2" />
-                  )}
+                <Button onClick={getDirections} disabled={directionsLoading || !originInput || !destinationInput} className="w-full h-8 text-xs">
+                  {directionsLoading ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Route className="h-3.5 w-3.5 mr-1.5" />}
                   Get Directions
                 </Button>
 
                 {directionsResult && (
                   <Card className="border-primary/30 bg-primary/5">
-                    <CardContent className="p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="text-center">
-                            <p className="text-lg font-bold text-primary">{directionsResult.distance}</p>
-                            <p className="text-xs text-muted-foreground">Distance</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-lg font-bold flex items-center gap-1">
-                              <Clock className="h-3.5 w-3.5" />
-                              {directionsResult.duration}
-                            </p>
-                            <p className="text-xs text-muted-foreground">Duration</p>
-                          </div>
+                    <CardContent className="p-2 space-y-2">
+                      <div className="flex items-center gap-3">
+                        <div className="text-center">
+                          <p className="text-sm font-bold text-primary">{directionsResult.distance}</p>
+                          <p className="text-[10px] text-muted-foreground">Distance</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-sm font-bold flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {directionsResult.duration}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">Duration</p>
                         </div>
                       </div>
 
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowSteps(!showSteps)}
-                        className="w-full h-7 text-xs"
-                      >
-                        {showSteps ? 'Hide' : 'Show'} Steps ({directionsResult.steps.length})
+                      <Button variant="ghost" size="sm" onClick={() => setShowSteps(!showSteps)} className="w-full h-6 text-[10px]">
+                        {showSteps ? 'Hide' : 'Show'} {directionsResult.steps.length} Steps
                         {showSteps ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />}
                       </Button>
 
                       {showSteps && (
-                        <ScrollArea className="max-h-32">
-                          <div className="space-y-2">
+                        <ScrollArea className="max-h-24">
+                          <div className="space-y-1.5">
                             {directionsResult.steps.map((step, i) => (
-                              <div key={i} className="flex gap-2 text-xs">
+                              <div key={i} className="flex gap-1.5 text-[10px]">
                                 <span className="text-muted-foreground shrink-0">{i + 1}.</span>
                                 <div>
                                   <p>{step.instruction}</p>
-                                  <p className="text-muted-foreground">{step.distance} • {step.duration}</p>
+                                  <p className="text-muted-foreground">{step.distance}</p>
                                 </div>
                               </div>
                             ))}
@@ -781,48 +783,38 @@ export default function GoogleMapsManager() {
               </TabsContent>
 
               {/* Geocode Tab */}
-              <TabsContent value="geocode" className="flex-1 flex flex-col mt-0 p-3 space-y-3 data-[state=inactive]:hidden overflow-auto">
+              <TabsContent value="geocode" className="flex-1 flex flex-col mt-0 p-2 space-y-2 data-[state=inactive]:hidden overflow-auto">
                 <div className="space-y-1">
-                  <Label className="flex items-center gap-2 text-xs">
-                    <MapPinned className="h-3.5 w-3.5" />
-                    Address to Coordinates
+                  <Label className="flex items-center gap-1.5 text-xs">
+                    <MapPinned className="h-3 w-3" />
+                    Address → Coordinates
                   </Label>
-                  <p className="text-xs text-muted-foreground">Convert address to lat/lng</p>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Input
                     placeholder="Enter address..."
                     value={addressInput}
                     onChange={(e) => setAddressInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleGeocode()}
-                    className="h-9 text-xs"
+                    className="h-8 text-xs"
                   />
-                  <Button onClick={handleGeocode} disabled={geocodeLoading || !addressInput} className="w-full h-9 text-xs">
-                    {geocodeLoading ? (
-                      <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
-                    ) : (
-                      <MapPinned className="h-3.5 w-3.5 mr-2" />
-                    )}
-                    Get Coordinates
+                  <Button onClick={handleGeocode} disabled={geocodeLoading || !addressInput} className="w-full h-8 text-xs">
+                    {geocodeLoading ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <MapPinned className="h-3.5 w-3.5 mr-1.5" />}
+                    Geocode
                   </Button>
                 </div>
 
                 {geocodeResult && (
                   <Card className="border-green-500/30 bg-green-500/5">
-                    <CardContent className="p-3 space-y-2">
+                    <CardContent className="p-2 space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-green-500">Result</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => copyToClipboard(`${geocodeResult.lat}, ${geocodeResult.lng}`)}
-                        >
+                        <span className="text-[10px] font-medium text-green-500">Result</span>
+                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => copyToClipboard(`${geocodeResult.lat}, ${geocodeResult.lng}`)}>
                           {copied ? <CheckCircle2 className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
                         </Button>
                       </div>
-                      <div className="space-y-1 text-xs">
+                      <div className="space-y-0.5 text-[10px]">
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Lat:</span>
                           <span className="font-mono">{geocodeResult.lat.toFixed(6)}</span>
@@ -831,9 +823,7 @@ export default function GoogleMapsManager() {
                           <span className="text-muted-foreground">Lng:</span>
                           <span className="font-mono">{geocodeResult.lng.toFixed(6)}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground pt-1 border-t border-border/60 line-clamp-2">
-                          {geocodeResult.formattedAddress}
-                        </p>
+                        <p className="text-muted-foreground pt-1 border-t border-border/60 truncate">{geocodeResult.formattedAddress}</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -841,64 +831,40 @@ export default function GoogleMapsManager() {
               </TabsContent>
 
               {/* Reverse Geocode Tab */}
-              <TabsContent value="reverse" className="flex-1 flex flex-col mt-0 p-3 space-y-3 data-[state=inactive]:hidden overflow-auto">
+              <TabsContent value="reverse" className="flex-1 flex flex-col mt-0 p-2 space-y-2 data-[state=inactive]:hidden overflow-auto">
                 <div className="space-y-1">
-                  <Label className="flex items-center gap-2 text-xs">
-                    <ArrowRightLeft className="h-3.5 w-3.5" />
-                    Coordinates to Address
+                  <Label className="flex items-center gap-1.5 text-xs">
+                    <ArrowRightLeft className="h-3 w-3" />
+                    Coordinates → Address
                   </Label>
-                  <p className="text-xs text-muted-foreground">Convert lat/lng to address</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Latitude</Label>
-                    <Input
-                      placeholder="37.4224"
-                      value={reverseLatitude}
-                      onChange={(e) => setReverseLatitude(e.target.value)}
-                      className="h-9 text-xs"
-                    />
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div className="space-y-0.5">
+                    <Label className="text-[10px]">Lat</Label>
+                    <Input placeholder="37.4224" value={reverseLatitude} onChange={(e) => setReverseLatitude(e.target.value)} className="h-8 text-xs" />
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Longitude</Label>
-                    <Input
-                      placeholder="-122.0842"
-                      value={reverseLongitude}
-                      onChange={(e) => setReverseLongitude(e.target.value)}
-                      className="h-9 text-xs"
-                    />
+                  <div className="space-y-0.5">
+                    <Label className="text-[10px]">Lng</Label>
+                    <Input placeholder="-122.084" value={reverseLongitude} onChange={(e) => setReverseLongitude(e.target.value)} className="h-8 text-xs" />
                   </div>
                 </div>
 
-                <Button onClick={reverseGeocode} disabled={geocodeLoading || !reverseLatitude || !reverseLongitude} className="w-full h-9 text-xs">
-                  {geocodeLoading ? (
-                    <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
-                  ) : (
-                    <ArrowRightLeft className="h-3.5 w-3.5 mr-2" />
-                  )}
-                  Get Address
-                </Button>
-
-                <Button variant="outline" size="sm" onClick={goToMyLocation} className="w-full h-8 text-xs">
-                  <Navigation className="h-3.5 w-3.5 mr-2" />
-                  Use My Location
+                <Button onClick={reverseGeocode} disabled={geocodeLoading || !reverseLatitude || !reverseLongitude} className="w-full h-8 text-xs">
+                  {geocodeLoading ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />}
+                  Reverse Geocode
                 </Button>
 
                 {reverseResult && (
                   <Card className="border-blue-500/30 bg-blue-500/5">
-                    <CardContent className="p-3">
-                      <div className="flex items-start justify-between gap-2">
+                    <CardContent className="p-2">
+                      <div className="flex items-start gap-1.5">
+                        <MapPin className="h-3 w-3 text-blue-500 mt-0.5 shrink-0" />
                         <div className="min-w-0">
-                          <span className="text-xs font-medium text-blue-500">Address</span>
-                          <p className="text-xs mt-1 break-words">{reverseResult}</p>
+                          <p className="text-[10px] font-medium text-blue-500">Address</p>
+                          <p className="text-[10px] text-muted-foreground">{reverseResult}</p>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 shrink-0"
-                          onClick={() => copyToClipboard(reverseResult)}
-                        >
+                        <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={() => copyToClipboard(reverseResult)}>
                           {copied ? <CheckCircle2 className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
                         </Button>
                       </div>
@@ -909,15 +875,12 @@ export default function GoogleMapsManager() {
             </Tabs>
           </div>
 
-          {/* Map Area */}
+          {/* Map Container */}
           <div className="flex-1 relative min-h-[200px]">
-            <div
-              ref={mapRef}
-              className="absolute inset-0"
-            />
+            <div ref={mapRef} className="absolute inset-0" />
             {!mapLoaded && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/80">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
             )}
           </div>
