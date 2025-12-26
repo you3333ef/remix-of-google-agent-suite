@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 interface MapsRequest {
-  action: 'geocode' | 'reverseGeocode' | 'directions' | 'places' | 'search' | 'getApiKey';
+  action: 'geocode' | 'reverseGeocode' | 'directions' | 'places' | 'search' | 'getApiKey' | 'placeDetails' | 'distanceMatrix' | 'nearbySearch' | 'autocomplete';
   apiKey?: string;
   userId?: string;
   query?: string;
@@ -15,6 +15,7 @@ interface MapsRequest {
   address?: string;
   lat?: number;
   lng?: number;
+  placeId?: string;
   params?: Record<string, any>;
 }
 
@@ -30,9 +31,9 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const requestData: MapsRequest = await req.json();
-    const { action, apiKey, userId, query, location, address, lat, lng, params } = requestData;
+    const { action, apiKey, userId, query, location, address, lat, lng, placeId, params } = requestData;
     
-    console.log(`Google Maps action: ${action}`);
+    console.log(`[GoogleMaps] Action: ${action}`);
     
     // Get API key either from request or from user settings
     let mapsApiKey = apiKey;
@@ -50,7 +51,7 @@ serve(async (req) => {
       }
     }
 
-    if (!mapsApiKey) {
+    if (!mapsApiKey && action !== 'getApiKey') {
       throw new Error('Google Maps API key not found. Please configure it in settings.');
     }
 
@@ -65,7 +66,7 @@ serve(async (req) => {
         const addr = address || params?.address;
         if (!addr) throw new Error('Address is required for geocoding');
         
-        console.log(`Geocoding address: ${addr}`);
+        console.log(`[GoogleMaps] Geocoding: ${addr}`);
         const response = await fetch(
           `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addr)}&key=${mapsApiKey}`
         );
@@ -79,6 +80,8 @@ serve(async (req) => {
             formattedAddress: firstResult.formatted_address,
             placeId: firstResult.place_id,
             addressComponents: firstResult.address_components,
+            locationType: firstResult.geometry.location_type,
+            viewport: firstResult.geometry.viewport,
             allResults: geocodeResult.results
           };
         } else {
@@ -92,14 +95,14 @@ serve(async (req) => {
       }
 
       case 'reverseGeocode': {
-        const latitude = lat || params?.lat;
-        const longitude = lng || params?.lng;
+        const latitude = lat ?? params?.lat;
+        const longitude = lng ?? params?.lng;
         
         if (latitude === undefined || longitude === undefined) {
           throw new Error('Latitude and longitude are required for reverse geocoding');
         }
         
-        console.log(`Reverse geocoding: ${latitude}, ${longitude}`);
+        console.log(`[GoogleMaps] Reverse geocoding: ${latitude}, ${longitude}`);
         const response = await fetch(
           `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${mapsApiKey}`
         );
@@ -112,6 +115,7 @@ serve(async (req) => {
             formattedAddress: firstResult.formatted_address,
             placeId: firstResult.place_id,
             addressComponents: firstResult.address_components,
+            plusCode: reverseResult.plus_code,
             allResults: reverseResult.results
           };
         } else {
@@ -130,24 +134,122 @@ serve(async (req) => {
         
         let url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(searchQuery)}&key=${mapsApiKey}`;
         if (location) {
-          url += `&location=${location.lat},${location.lng}&radius=5000`;
+          url += `&location=${location.lat},${location.lng}&radius=${params?.radius || 5000}`;
+        }
+        if (params?.type) {
+          url += `&type=${params.type}`;
+        }
+        if (params?.openNow) {
+          url += '&opennow=true';
+        }
+        if (params?.minPrice !== undefined) {
+          url += `&minprice=${params.minPrice}`;
+        }
+        if (params?.maxPrice !== undefined) {
+          url += `&maxprice=${params.maxPrice}`;
         }
         
-        console.log(`Searching places: ${searchQuery}`);
+        console.log(`[GoogleMaps] Text search: ${searchQuery}`);
         const response = await fetch(url);
         result = await response.json();
         break;
       }
 
+      case 'nearbySearch': {
+        const { lat: nlat, lng: nlng, radius = 5000, type, keyword } = params || {};
+        if (!nlat || !nlng) throw new Error('Location is required for nearby search');
+        
+        let url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${nlat},${nlng}&radius=${radius}&key=${mapsApiKey}`;
+        if (type) url += `&type=${type}`;
+        if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+        
+        console.log(`[GoogleMaps] Nearby search at: ${nlat}, ${nlng}`);
+        const response = await fetch(url);
+        result = await response.json();
+        break;
+      }
+
+      case 'placeDetails': {
+        const pId = placeId || params?.placeId;
+        if (!pId) throw new Error('Place ID is required for place details');
+        
+        const fields = params?.fields || 'name,formatted_address,geometry,rating,user_ratings_total,opening_hours,photos,reviews,price_level,website,formatted_phone_number,types';
+        
+        console.log(`[GoogleMaps] Place details: ${pId}`);
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/place/details/json?place_id=${pId}&fields=${fields}&key=${mapsApiKey}`
+        );
+        const detailsResult = await response.json();
+        
+        if (detailsResult.status === 'OK') {
+          result = {
+            success: true,
+            place: detailsResult.result,
+            htmlAttributions: detailsResult.html_attributions
+          };
+        } else {
+          result = {
+            success: false,
+            error: detailsResult.status,
+            message: detailsResult.error_message
+          };
+        }
+        break;
+      }
+
       case 'directions': {
-        const { origin, destination, mode = 'driving' } = params || {};
+        const { origin, destination, mode = 'driving', waypoints, alternatives, avoid, units, departureTime, arrivalTime } = params || {};
         if (!origin || !destination) {
           throw new Error('Origin and destination are required for directions');
         }
         
+        let url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&mode=${mode}&key=${mapsApiKey}`;
+        
+        if (waypoints && Array.isArray(waypoints) && waypoints.length > 0) {
+          url += `&waypoints=optimize:true|${waypoints.map(w => encodeURIComponent(w)).join('|')}`;
+        }
+        if (alternatives) url += '&alternatives=true';
+        if (avoid) url += `&avoid=${avoid}`;
+        if (units) url += `&units=${units}`;
+        if (departureTime) url += `&departure_time=${departureTime}`;
+        if (arrivalTime) url += `&arrival_time=${arrivalTime}`;
+        
+        console.log(`[GoogleMaps] Directions: ${origin} -> ${destination} (${mode})`);
+        const response = await fetch(url);
+        result = await response.json();
+        break;
+      }
+
+      case 'distanceMatrix': {
+        const { origins, destinations, mode = 'driving' } = params || {};
+        if (!origins || !destinations) {
+          throw new Error('Origins and destinations are required for distance matrix');
+        }
+        
+        const originsStr = Array.isArray(origins) ? origins.map(o => encodeURIComponent(o)).join('|') : encodeURIComponent(origins);
+        const destinationsStr = Array.isArray(destinations) ? destinations.map(d => encodeURIComponent(d)).join('|') : encodeURIComponent(destinations);
+        
+        console.log(`[GoogleMaps] Distance matrix: ${originsStr} -> ${destinationsStr}`);
         const response = await fetch(
-          `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&mode=${mode}&key=${mapsApiKey}`
+          `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${originsStr}&destinations=${destinationsStr}&mode=${mode}&key=${mapsApiKey}`
         );
+        result = await response.json();
+        break;
+      }
+
+      case 'autocomplete': {
+        const input = params?.input || query;
+        if (!input) throw new Error('Input is required for autocomplete');
+        
+        let url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&key=${mapsApiKey}`;
+        if (location) {
+          url += `&location=${location.lat},${location.lng}&radius=${params?.radius || 50000}`;
+        }
+        if (params?.types) url += `&types=${params.types}`;
+        if (params?.components) url += `&components=${params.components}`;
+        
+        console.log(`[GoogleMaps] Autocomplete: ${input}`);
+        const response = await fetch(url);
         result = await response.json();
         break;
       }
@@ -170,7 +272,7 @@ serve(async (req) => {
         throw new Error(`Unknown action: ${action}`);
     }
 
-    console.log(`Google Maps ${action} completed successfully`);
+    console.log(`[GoogleMaps] ${action} completed successfully`);
 
     return new Response(
       JSON.stringify({ success: true, data: result }),
@@ -181,7 +283,7 @@ serve(async (req) => {
     );
 
   } catch (error: any) {
-    console.error('Google Maps error:', error);
+    console.error('[GoogleMaps] Error:', error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
       { 
