@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { Terminal as TerminalIcon, Maximize2, Minimize2, Loader2 } from 'lucide-react';
+import { Terminal as TerminalIcon, Maximize2, Minimize2, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
 interface TerminalProps {
@@ -17,9 +16,8 @@ interface TerminalLine {
 
 export default function TerminalComponent({ isExpanded, onToggleExpand }: TerminalProps) {
   const [lines, setLines] = useState<TerminalLine[]>([
-    { type: 'system', content: 'Agentic Max Terminal v1.0.0 - AI-Powered Shell', timestamp: new Date() },
-    { type: 'output', content: 'Connected to AI backend. Type commands or ask questions.', timestamp: new Date() },
-    { type: 'output', content: '─'.repeat(50), timestamp: new Date() },
+    { type: 'system', content: '▸ Agentic Max Terminal v1.0.0', timestamp: new Date() },
+    { type: 'output', content: 'Connected to AI backend. Type "help" for available commands.', timestamp: new Date() },
   ]);
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<string[]>([]);
@@ -40,20 +38,42 @@ export default function TerminalComponent({ isExpanded, onToggleExpand }: Termin
     setHistory(prev => [...prev, cmd]);
     setHistoryIndex(-1);
 
-    // Handle built-in commands
     if (trimmedCmd.toLowerCase() === 'clear') {
-      setLines([]);
+      setLines([
+        { type: 'system', content: '▸ Terminal cleared', timestamp: new Date() },
+      ]);
       return;
     }
 
     if (trimmedCmd.toLowerCase() === 'help') {
       setLines(prev => [...prev,
-        { type: 'output', content: 'Built-in commands:', timestamp: new Date() },
-        { type: 'output', content: '  clear    - Clear terminal', timestamp: new Date() },
-        { type: 'output', content: '  help     - Show this help', timestamp: new Date() },
         { type: 'output', content: '', timestamp: new Date() },
-        { type: 'output', content: 'Or ask any question - AI will respond!', timestamp: new Date() },
+        { type: 'system', content: 'Available Commands:', timestamp: new Date() },
+        { type: 'output', content: '  clear      Clear the terminal', timestamp: new Date() },
+        { type: 'output', content: '  help       Show this help message', timestamp: new Date() },
+        { type: 'output', content: '  date       Show current date/time', timestamp: new Date() },
+        { type: 'output', content: '  whoami     Show current user info', timestamp: new Date() },
+        { type: 'output', content: '', timestamp: new Date() },
+        { type: 'success', content: 'Tip: You can also ask AI questions directly!', timestamp: new Date() },
       ]);
+      return;
+    }
+
+    if (trimmedCmd.toLowerCase() === 'date') {
+      setLines(prev => [...prev, { 
+        type: 'success', 
+        content: new Date().toLocaleString(), 
+        timestamp: new Date() 
+      }]);
+      return;
+    }
+
+    if (trimmedCmd.toLowerCase() === 'whoami') {
+      setLines(prev => [...prev, { 
+        type: 'success', 
+        content: 'agentic-max-user @ development', 
+        timestamp: new Date() 
+      }]);
       return;
     }
 
@@ -69,7 +89,7 @@ export default function TerminalComponent({ isExpanded, onToggleExpand }: Termin
         body: JSON.stringify({
           messages: [{ 
             role: 'user', 
-            content: `You are a terminal assistant. Respond concisely to this command/question: ${trimmedCmd}. If it's a code question, provide working examples. Use plain text, no markdown formatting.`
+            content: `You are a terminal assistant. Respond concisely and helpfully to: ${trimmedCmd}. Keep responses brief and use plain text.`
           }],
           agentName: 'Terminal AI',
         }),
@@ -111,7 +131,6 @@ export default function TerminalComponent({ isExpanded, onToggleExpand }: Termin
         }
       }
 
-      // Add response lines
       const responseLines = fullResponse.split('\n').filter(l => l.trim());
       responseLines.forEach(line => {
         setLines(prev => [...prev, { type: 'success', content: line, timestamp: new Date() }]);
@@ -152,20 +171,31 @@ export default function TerminalComponent({ isExpanded, onToggleExpand }: Termin
     }
   };
 
+  const clearTerminal = () => {
+    setLines([{ type: 'system', content: '▸ Terminal cleared', timestamp: new Date() }]);
+  };
+
   return (
     <div className={cn(
-      "flex flex-col glass-panel overflow-hidden transition-all duration-300 bg-background",
-      isExpanded ? "fixed inset-4 z-50" : "h-full"
+      "flex flex-col overflow-hidden transition-all duration-300 bg-background border-t border-border/40",
+      isExpanded ? "fixed inset-4 z-50 rounded-xl border" : "h-full"
     )}>
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-secondary/50">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border/40 bg-card/60 backdrop-blur-sm">
         <div className="flex items-center gap-2">
-          <TerminalIcon className="h-4 w-4 text-neon-green" />
-          <span className="text-sm font-medium text-foreground font-mono">Terminal</span>
-          {isProcessing && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-destructive/80" />
+            <span className="w-3 h-3 rounded-full bg-neon-orange/80" />
+            <span className="w-3 h-3 rounded-full bg-neon-green/80" />
+          </div>
+          <span className="text-sm font-medium text-foreground font-mono ml-2">Terminal</span>
+          {isProcessing && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary ml-2" />}
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon-sm" onClick={onToggleExpand}>
+          <Button variant="ghost" size="icon-sm" onClick={clearTerminal} className="text-muted-foreground hover:text-foreground">
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon-sm" onClick={onToggleExpand} className="text-muted-foreground hover:text-foreground">
             {isExpanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
           </Button>
         </div>
@@ -175,18 +205,18 @@ export default function TerminalComponent({ isExpanded, onToggleExpand }: Termin
       <div
         ref={scrollRef}
         onClick={() => inputRef.current?.focus()}
-        className="flex-1 overflow-y-auto p-3 font-mono text-sm cursor-text scrollbar-thin"
+        className="flex-1 overflow-y-auto p-4 font-mono text-sm cursor-text scrollbar-thin bg-background"
       >
         {lines.map((line, i) => (
           <div
             key={i}
             className={cn(
               "leading-6 whitespace-pre-wrap",
-              line.type === 'input' && "text-primary",
+              line.type === 'input' && "text-primary font-medium",
               line.type === 'output' && "text-muted-foreground",
               line.type === 'error' && "text-destructive",
               line.type === 'success' && "text-neon-green",
-              line.type === 'system' && "text-accent"
+              line.type === 'system' && "text-accent font-semibold"
             )}
           >
             {line.content}
@@ -194,8 +224,8 @@ export default function TerminalComponent({ isExpanded, onToggleExpand }: Termin
         ))}
         
         {/* Input Line */}
-        <div className="flex items-center leading-6">
-          <span className="text-primary">$ </span>
+        <div className="flex items-center leading-6 mt-1">
+          <span className="text-primary font-medium">$ </span>
           <input
             ref={inputRef}
             type="text"
