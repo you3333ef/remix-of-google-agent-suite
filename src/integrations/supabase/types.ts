@@ -173,6 +173,114 @@ export type Database = {
           },
         ]
       }
+      maps_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          messages: Json
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          messages?: Json
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          messages?: Json
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      maps_saved_places: {
+        Row: {
+          address: string | null
+          category: string | null
+          created_at: string
+          id: string
+          lat: number
+          lng: number
+          name: string
+          notes: string | null
+          place_id: string
+          rating: number | null
+          user_id: string
+        }
+        Insert: {
+          address?: string | null
+          category?: string | null
+          created_at?: string
+          id?: string
+          lat: number
+          lng: number
+          name: string
+          notes?: string | null
+          place_id: string
+          rating?: number | null
+          user_id: string
+        }
+        Update: {
+          address?: string | null
+          category?: string | null
+          created_at?: string
+          id?: string
+          lat?: number
+          lng?: number
+          name?: string
+          notes?: string | null
+          place_id?: string
+          rating?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      maps_saved_routes: {
+        Row: {
+          created_at: string
+          destination: string
+          distance: string | null
+          duration: string | null
+          id: string
+          name: string
+          origin: string
+          travel_mode: string
+          user_id: string
+          waypoints: Json | null
+        }
+        Insert: {
+          created_at?: string
+          destination: string
+          distance?: string | null
+          duration?: string | null
+          id?: string
+          name: string
+          origin: string
+          travel_mode?: string
+          user_id: string
+          waypoints?: Json | null
+        }
+        Update: {
+          created_at?: string
+          destination?: string
+          distance?: string | null
+          duration?: string | null
+          id?: string
+          name?: string
+          origin?: string
+          travel_mode?: string
+          user_id?: string
+          waypoints?: Json | null
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           content: string
