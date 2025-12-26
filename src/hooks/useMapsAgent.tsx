@@ -1,15 +1,21 @@
-import { useState, useCallback, useRef } from 'react';
-import { GoogleMapsAgent, createMapsAgent, ReActStep, MapsAgentConfig } from '@/agents/mapsAgent';
+import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from './use-toast';
 
 export interface MapsAgentMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
-  steps?: ReActStep[];
+  toolCalls?: ToolCallResult[];
   isStreaming?: boolean;
+}
+
+export interface ToolCallResult {
+  name: string;
+  args: Record<string, any>;
+  result?: any;
 }
 
 export interface UseMapsAgentReturn {
@@ -17,31 +23,26 @@ export interface UseMapsAgentReturn {
   isProcessing: boolean;
   sendMessage: (content: string) => Promise<void>;
   clearMessages: () => void;
-  agent: GoogleMapsAgent | null;
-  initializeAgent: (apiKey: string) => void;
+  isReady: boolean;
 }
 
 export function useMapsAgent(): UseMapsAgentReturn {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [messages, setMessages] = useState<MapsAgentMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const agentRef = useRef<GoogleMapsAgent | null>(null);
+  const [isReady, setIsReady] = useState(false);
 
-  const initializeAgent = useCallback((apiKey: string) => {
-    if (!user) return;
-
-    const config: MapsAgentConfig = {
-      apiKey,
-      userId: user.id,
-      maxIterations: 5,
-      verbose: true,
-    };
-
-    agentRef.current = createMapsAgent(config);
+  // Auto-initialize when user is available
+  useEffect(() => {
+    if (user) {
+      setIsReady(true);
+      console.log('[MapsAgent] Ready for user:', user.id);
+    }
   }, [user]);
 
   const sendMessage = useCallback(async (content: string) => {
-    if (!agentRef.current || !content.trim()) return;
+    if (!content.trim() || !user) return;
 
     const userMessage: MapsAgentMessage = {
       id: `msg_${Date.now()}`,
@@ -58,48 +59,77 @@ export function useMapsAgent(): UseMapsAgentReturn {
       role: 'assistant',
       content: '',
       timestamp: new Date(),
-      steps: [],
       isStreaming: true,
     };
 
     setMessages((prev) => [...prev, assistantMessage]);
 
     try {
-      const stepGenerator = await agentRef.current.processUserRequest(content);
-      const steps: ReActStep[] = [];
-      let finalContent = '';
+      // Build conversation history for context
+      const conversationHistory = messages.map(m => ({
+        role: m.role,
+        content: m.content,
+      }));
+      
+      conversationHistory.push({ role: 'user', content: content.trim() });
 
-      for await (const step of stepGenerator) {
-        steps.push(step);
+      // Call the maps-agent edge function
+      const { data, error } = await supabase.functions.invoke('maps-agent', {
+        body: {
+          messages: conversationHistory,
+        },
+      });
 
-        if (step.type === 'answer') {
-          finalContent = step.content;
-        }
-
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessage.id
-              ? { ...msg, steps: [...steps], content: finalContent }
-              : msg
-          )
-        );
+      if (error) {
+        throw error;
       }
 
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === assistantMessage.id
-            ? { ...msg, isStreaming: false }
-            : msg
-        )
-      );
-    } catch (error) {
-      console.error('[useMapsAgent] Error:', error);
+      if (!data.success) {
+        throw new Error(data.error || 'Unknown error');
+      }
+
+      // Update assistant message with response
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessage.id
             ? {
                 ...msg,
-                content: `Error: ${(error as Error).message}`,
+                content: data.content,
+                toolCalls: data.toolCalls,
+                isStreaming: false,
+              }
+            : msg
+        )
+      );
+
+    } catch (error: any) {
+      console.error('[useMapsAgent] Error:', error);
+      
+      let errorMessage = error.message || 'An error occurred';
+      
+      // Handle specific error types
+      if (error.message?.includes('Rate limit')) {
+        toast({
+          title: 'Rate Limit',
+          description: 'Too many requests. Please wait a moment.',
+          variant: 'destructive',
+        });
+      } else if (error.message?.includes('credits')) {
+        toast({
+          title: 'Credits Exhausted',
+          description: 'AI credits depleted. Please add funds.',
+          variant: 'destructive',
+        });
+      } else if (error.message?.includes('GOOGLE_MAPS_API_KEY')) {
+        errorMessage = 'Google Maps API is not configured. Please contact the administrator.';
+      }
+      
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMessage.id
+            ? {
+                ...msg,
+                content: `❌ ${errorMessage}`,
                 isStreaming: false,
               }
             : msg
@@ -108,11 +138,10 @@ export function useMapsAgent(): UseMapsAgentReturn {
     } finally {
       setIsProcessing(false);
     }
-  }, []);
+  }, [user, messages, toast]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);
-    agentRef.current?.clearHistory();
   }, []);
 
   return {
@@ -120,7 +149,6 @@ export function useMapsAgent(): UseMapsAgentReturn {
     isProcessing,
     sendMessage,
     clearMessages,
-    agent: agentRef.current,
-    initializeAgent,
+    isReady,
   };
 }

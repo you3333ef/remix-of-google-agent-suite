@@ -84,7 +84,7 @@ export default function GoogleMapsManager() {
   
   // Agent chat states
   const [agentInput, setAgentInput] = useState('');
-  const { messages, isProcessing, sendMessage, clearMessages, initializeAgent } = useMapsAgent();
+  const { messages: agentMessages, isProcessing, sendMessage, clearMessages, isReady: agentReady } = useMapsAgent();
   
   const { user } = useAuth();
   const { toast } = useToast();
@@ -107,16 +107,15 @@ export default function GoogleMapsManager() {
   useEffect(() => {
     if (apiKey && !mapLoaded) {
       loadGoogleMapsScript();
-      initializeAgent(apiKey);
     }
-  }, [apiKey, initializeAgent]);
+  }, [apiKey]);
 
   // Auto-scroll chat
   useEffect(() => {
     if (chatScrollRef.current) {
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [agentMessages]);
 
   const fetchApiKeyFromBackend = async () => {
     try {
@@ -485,19 +484,27 @@ export default function GoogleMapsManager() {
           "max-w-[85%] rounded-lg px-3 py-2 text-xs",
           isUser ? "bg-primary text-primary-foreground" : "bg-muted"
         )}>
-          {message.isStreaming && message.steps && message.steps.length > 0 && (
+          {message.isStreaming && message.toolCalls && message.toolCalls.length > 0 && (
             <div className="mb-2 space-y-1">
-              {message.steps.filter(s => s.type !== 'answer').map((step, i) => (
+              {message.toolCalls.map((tc, i) => (
                 <div key={i} className="flex items-center gap-1.5 text-muted-foreground">
-                  {step.type === 'think' && <Sparkles className="h-3 w-3 text-yellow-500" />}
-                  {step.type === 'act' && <Loader2 className="h-3 w-3 animate-spin text-blue-500" />}
-                  {step.type === 'observe' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
-                  <span className="text-[10px]">{step.type}: {step.content.substring(0, 50)}...</span>
+                  <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                  <span className="text-[10px]">Using: {tc.name}</span>
                 </div>
               ))}
             </div>
           )}
-          <div className="whitespace-pre-wrap">{message.content || (message.isStreaming ? '...' : '')}</div>
+          {!message.isStreaming && message.toolCalls && message.toolCalls.length > 0 && (
+            <div className="mb-2 space-y-1">
+              {message.toolCalls.map((tc, i) => (
+                <div key={i} className="flex items-center gap-1.5 text-muted-foreground">
+                  <CheckCircle2 className="h-3 w-3 text-green-500" />
+                  <span className="text-[10px]">Used: {tc.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="whitespace-pre-wrap">{message.content || (message.isStreaming ? 'Processing...' : '')}</div>
         </div>
       </div>
     );
@@ -594,7 +601,7 @@ export default function GoogleMapsManager() {
                       <Sparkles className="h-3.5 w-3.5 text-primary" />
                       <span className="text-xs font-medium">Maps Agent</span>
                     </div>
-                    {messages.length > 0 && (
+                    {agentMessages.length > 0 && (
                       <Button variant="ghost" size="sm" onClick={clearMessages} className="h-6 px-2 text-[10px]">
                         Clear
                       </Button>
@@ -603,7 +610,7 @@ export default function GoogleMapsManager() {
                 </div>
                 
                 <ScrollArea className="flex-1 p-2" ref={chatScrollRef}>
-                  {messages.length === 0 ? (
+                  {agentMessages.length === 0 ? (
                     <div className="text-center py-6 space-y-3">
                       <div className="w-12 h-12 mx-auto rounded-full bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 flex items-center justify-center">
                         <Bot className="h-6 w-6 text-primary" />
@@ -627,7 +634,7 @@ export default function GoogleMapsManager() {
                       </div>
                     </div>
                   ) : (
-                    messages.map((msg) => <AgentMessageBubble key={msg.id} message={msg} />)
+                    agentMessages.map((msg) => <AgentMessageBubble key={msg.id} message={msg} />)
                   )}
                 </ScrollArea>
                 
