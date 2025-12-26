@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Settings, Palette, Key, User, Moon, Sun, Monitor, Save, Trash2, ExternalLink, Check, Bot, Plug, Mail, MapPin, BarChart3, Cloud, Globe, Shield, Zap } from 'lucide-react';
+import { X, Settings, Palette, Key, User, Moon, Sun, Monitor, Save, Trash2, ExternalLink, Check, Bot, Plug, Mail, MapPin, BarChart3, Cloud, Globe, Shield, Zap, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -17,6 +17,7 @@ interface SettingsPanelProps {
 
 type Theme = 'dark' | 'light' | 'system';
 type Tab = 'profile' | 'theme' | 'ai-providers' | 'integrations';
+type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 
 interface IntegrationKey {
   id: string;
@@ -25,6 +26,7 @@ interface IntegrationKey {
   placeholder: string;
   docsUrl: string;
   description: string;
+  testable: boolean;
   fields?: { id: string; label: string; placeholder: string; type?: string }[];
 }
 
@@ -36,6 +38,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [selectedProvider, setSelectedProvider] = useState(defaultProvider);
   const [selectedModel, setSelectedModel] = useState(defaultModel);
   const [saving, setSaving] = useState(false);
+  const [testStatus, setTestStatus] = useState<Record<string, TestStatus>>({});
   const { toast } = useToast();
   const { user, signOut } = useAuth();
 
@@ -108,6 +111,40 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
   const updateApiKey = (providerId: string, value: string) => {
     setApiKeys(prev => ({ ...prev, [providerId]: value }));
+    // Reset test status when key changes
+    setTestStatus(prev => ({ ...prev, [providerId]: 'idle' }));
+  };
+
+  const testConnection = async (integrationId: string) => {
+    setTestStatus(prev => ({ ...prev, [integrationId]: 'testing' }));
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('test-integration', {
+        body: { 
+          integrationId,
+          apiKeys: apiKeys
+        }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.success) {
+        setTestStatus(prev => ({ ...prev, [integrationId]: 'success' }));
+        toast({ 
+          title: "Connection successful", 
+          description: `${integrationId} is configured correctly.` 
+        });
+      } else {
+        throw new Error(data?.error || 'Connection failed');
+      }
+    } catch (error: any) {
+      setTestStatus(prev => ({ ...prev, [integrationId]: 'error' }));
+      toast({ 
+        title: "Connection failed", 
+        description: error.message || 'Failed to connect to the service.',
+        variant: "destructive"
+      });
+    }
   };
 
   const currentProvider = aiProviders.find(p => p.id === selectedProvider);
@@ -127,6 +164,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       placeholder: 'AIzaSy...',
       docsUrl: 'https://console.cloud.google.com/apis/credentials',
       description: 'Enable interactive maps and location services',
+      testable: true,
       fields: [
         { id: 'google_maps_api_key', label: 'API Key', placeholder: 'AIzaSy...' }
       ]
@@ -138,6 +176,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       placeholder: 'G-XXXXXXXXXX',
       docsUrl: 'https://analytics.google.com/',
       description: 'Track website traffic and user behavior',
+      testable: false,
       fields: [
         { id: 'google_analytics_id', label: 'Measurement ID', placeholder: 'G-XXXXXXXXXX' }
       ]
@@ -149,6 +188,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       placeholder: 'smtp.gmail.com',
       docsUrl: 'https://support.google.com/mail/answer/7126229',
       description: 'Send and receive emails',
+      testable: true,
       fields: [
         { id: 'smtp_host', label: 'SMTP Host', placeholder: 'smtp.gmail.com' },
         { id: 'smtp_port', label: 'SMTP Port', placeholder: '587' },
@@ -163,6 +203,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       placeholder: 'Your API Key',
       docsUrl: 'https://dash.cloudflare.com/profile/api-tokens',
       description: 'Manage DNS records and domains',
+      testable: true,
       fields: [
         { id: 'cloudflare_api_key', label: 'API Key', placeholder: 'Your global API key' },
         { id: 'cloudflare_zone_id', label: 'Zone ID', placeholder: 'Zone ID from dashboard' }
@@ -175,6 +216,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       placeholder: 'Your Developer Token',
       docsUrl: 'https://ads.google.com/',
       description: 'Manage advertising campaigns',
+      testable: false,
       fields: [
         { id: 'google_ads_developer_token', label: 'Developer Token', placeholder: 'Developer token' },
         { id: 'google_ads_client_id', label: 'Client ID', placeholder: 'OAuth Client ID' },
@@ -188,12 +230,27 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       placeholder: 'OAuth credentials',
       docsUrl: 'https://search.google.com/search-console',
       description: 'Monitor search performance',
+      testable: false,
       fields: [
         { id: 'google_search_console_client_id', label: 'Client ID', placeholder: 'OAuth Client ID' },
         { id: 'google_search_console_client_secret', label: 'Client Secret', placeholder: 'OAuth Client Secret', type: 'password' }
       ]
     }
   ];
+
+  const getTestStatusIcon = (integrationId: string) => {
+    const status = testStatus[integrationId];
+    switch (status) {
+      case 'testing':
+        return <Loader2 className="h-4 w-4 animate-spin" />;
+      case 'success':
+        return <CheckCircle className="h-4 w-4 text-neon-green" />;
+      case 'error':
+        return <XCircle className="h-4 w-4 text-destructive" />;
+      default:
+        return null;
+    }
+  };
 
   const themeOptions = [
     { id: 'dark' as const, icon: Moon, label: 'Dark' },
@@ -456,6 +513,21 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                             </div>
                           ))}
                         </div>
+
+                        {integration.testable && hasAnyValue && (
+                          <div className="mt-4 pt-3 border-t border-border/40">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => testConnection(integration.id)}
+                              disabled={testStatus[integration.id] === 'testing'}
+                              className="gap-2"
+                            >
+                              {getTestStatusIcon(integration.id)}
+                              {testStatus[integration.id] === 'testing' ? 'Testing...' : 'Test Connection'}
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
