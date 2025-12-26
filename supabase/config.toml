@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.oauth-callback]
 verify_jwt = false
+
+[functions.maps-agent]
+verify_jwt = false
