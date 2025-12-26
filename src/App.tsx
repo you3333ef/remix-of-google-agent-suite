@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import Maps from "./pages/Maps";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -18,11 +19,12 @@ function App() {
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/maps" element={<Maps />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
           </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>
