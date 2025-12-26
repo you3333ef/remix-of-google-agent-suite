@@ -97,9 +97,10 @@ export default function GoogleMapsManager() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Auto-fetch API key from backend on mount
   useEffect(() => {
     if (user) {
-      loadApiKey();
+      fetchApiKeyFromBackend();
     }
   }, [user]);
 
@@ -117,18 +118,31 @@ export default function GoogleMapsManager() {
     }
   }, [messages]);
 
-  const loadApiKey = async () => {
-    if (!user) return;
-    
-    const { data } = await supabase
-      .from('user_settings')
-      .select('api_keys')
-      .eq('user_id', user.id)
-      .single();
+  const fetchApiKeyFromBackend = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('google-maps', {
+        body: { action: 'getApiKey' }
+      });
 
-    if (data?.api_keys) {
-      const keys = data.api_keys as Record<string, string>;
-      setApiKey(keys.google_maps_api_key || '');
+      if (error) throw error;
+      
+      const key = data?.data?.apiKey || data?.apiKey;
+      if (key) {
+        setApiKey(key);
+      } else {
+        toast({ 
+          title: "API Key Missing", 
+          description: "Google Maps API key not configured", 
+          variant: "destructive" 
+        });
+      }
+    } catch (error: any) {
+      console.error('Failed to fetch API key:', error);
+      toast({ 
+        title: "Error", 
+        description: "Failed to load Maps configuration", 
+        variant: "destructive" 
+      });
     }
   };
 
