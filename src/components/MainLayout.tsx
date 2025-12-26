@@ -53,9 +53,25 @@ export default function MainLayout() {
 
   const handleToolSelect = (toolId: string) => {
     setSelectedTool(toolId);
-    if (toolId === 'web-clone') {
-      setRightPanelMode('clone');
-      setActivePanel('clone');
+
+    switch (toolId) {
+      case 'web-clone':
+        setRightPanelMode('clone');
+        setActivePanel('clone');
+        return;
+      case 'terminal':
+        setRightPanelMode('split');
+        setActivePanel('terminal');
+        return;
+      case 'code-editor':
+        setRightPanelMode('code');
+        setActivePanel('code');
+        return;
+      case 'ai-chat':
+        setActivePanel('chat');
+        return;
+      default:
+        return;
     }
   };
 

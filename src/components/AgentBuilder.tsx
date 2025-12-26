@@ -29,9 +29,12 @@ export default function AgentBuilder({ isOpen, onClose, onAgentCreated }: AgentB
   const { user } = useAuth();
 
   const availableTools = [
-    'Google Maps', 'Analytics', 'Ads', 'Business Profile',
-    'Terminal', 'Code Editor', 'Web Clone', 'App Builder',
-    'Email', 'DNS', 'Testing', 'Automation', 'AI Chat', 'Deep Research'
+    'AI Chat',
+    'Web Clone',
+    'Code Editor',
+    'Terminal',
+    'File Explorer',
+    'Settings',
   ];
 
   const avatarOptions = ['🤖', '🦾', '🧠', '⚡', '🔮', '🎯', '🚀', '🌟', '💎', '🔥', '🦫', '🐙', '🦊', '🐺'];

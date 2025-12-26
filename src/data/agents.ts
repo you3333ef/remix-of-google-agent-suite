@@ -4,9 +4,9 @@ export const defaultAgents: Agent[] = [
   {
     id: 'manus',
     name: 'Manus',
-    description: 'Full Google Services Integration & Web Automation',
+    description: 'AI assistant for chat, cloning, and coding',
     avatar: '🤖',
-    tools: ['Google APIs', 'Web Clone', 'Analytics', 'Maps'],
+    tools: ['AI Chat', 'Web Clone', 'Code Editor', 'Terminal'],
     provider: 'openai',
     status: 'online',
     color: 'from-cyan-500 to-blue-600',
@@ -14,9 +14,9 @@ export const defaultAgents: Agent[] = [
   {
     id: 'capy',
     name: 'Capy.ai',
-    description: 'App Builder & Testing Automation Expert',
+    description: 'Fast coding helper with terminal guidance',
     avatar: '🦫',
-    tools: ['App Builder', 'Terminal', 'Testing', 'CI/CD'],
+    tools: ['Code Editor', 'Terminal', 'AI Chat'],
     provider: 'anthropic',
     status: 'online',
     color: 'from-purple-500 to-pink-600',
@@ -24,9 +24,9 @@ export const defaultAgents: Agent[] = [
   {
     id: 'same',
     name: 'Same.new',
-    description: 'Code Editor & Live Preview Specialist',
+    description: 'Live editor + preview workflow assistant',
     avatar: '⚡',
-    tools: ['Code Editor', 'Preview', 'Deploy', 'Git'],
+    tools: ['Code Editor', 'Web Clone', 'AI Chat'],
     provider: 'openrouter',
     status: 'online',
     color: 'from-green-500 to-emerald-600',
@@ -34,113 +34,16 @@ export const defaultAgents: Agent[] = [
   {
     id: 'cursor',
     name: 'Cursor',
-    description: 'AI-Powered Coding Assistant',
+    description: 'Refactoring and debugging assistant',
     avatar: '🎯',
-    tools: ['AI Coding', 'Terminal', 'Debugging', 'Refactor'],
+    tools: ['AI Chat', 'Code Editor', 'Terminal'],
     provider: 'anthropic',
     status: 'online',
     color: 'from-orange-500 to-red-600',
   },
-  {
-    id: 'bolt',
-    name: 'Bolt.DIY',
-    description: 'No-Code Website & App Generator',
-    avatar: '⚙️',
-    tools: ['Website Builder', 'Components', 'Templates', 'Export'],
-    provider: 'bolt',
-    status: 'online',
-    color: 'from-yellow-500 to-orange-600',
-  },
 ];
 
 export const tools: Tool[] = [
-  // Google APIs
-  {
-    id: 'google-maps',
-    name: 'Google Maps',
-    description: 'Location services & mapping',
-    icon: '🗺️',
-    category: 'google',
-  },
-  {
-    id: 'google-analytics',
-    name: 'Analytics',
-    description: 'Website & app analytics',
-    icon: '📊',
-    category: 'google',
-  },
-  {
-    id: 'google-ads',
-    name: 'Google Ads',
-    description: 'Advertising management',
-    icon: '📢',
-    category: 'google',
-  },
-  {
-    id: 'google-business',
-    name: 'Business Profile',
-    description: 'Business listing management',
-    icon: '🏢',
-    category: 'google',
-  },
-  {
-    id: 'google-merchant',
-    name: 'Merchant Center',
-    description: 'Product feed management',
-    icon: '🛒',
-    category: 'google',
-  },
-  {
-    id: 'search-console',
-    name: 'Search Console',
-    description: 'SEO & search performance',
-    icon: '🔍',
-    category: 'google',
-  },
-  // Communication
-  {
-    id: 'email',
-    name: 'Email Manager',
-    description: 'SMTP & Gmail integration',
-    icon: '📧',
-    category: 'communication',
-  },
-  {
-    id: 'dns',
-    name: 'DNS Manager',
-    description: 'Domain & DNS configuration',
-    icon: '🌐',
-    category: 'communication',
-  },
-  // Development
-  {
-    id: 'terminal',
-    name: 'Terminal',
-    description: 'Command line interface',
-    icon: '💻',
-    category: 'development',
-  },
-  {
-    id: 'code-editor',
-    name: 'Code Editor',
-    description: 'Full-featured code editor',
-    icon: '📝',
-    category: 'development',
-  },
-  {
-    id: 'web-clone',
-    name: 'Web Clone',
-    description: 'Clone any website',
-    icon: '📋',
-    category: 'development',
-  },
-  {
-    id: 'app-builder',
-    name: 'App Builder',
-    description: 'Native/Hybrid app builder',
-    icon: '📱',
-    category: 'development',
-  },
   // AI
   {
     id: 'ai-chat',
@@ -149,27 +52,28 @@ export const tools: Tool[] = [
     icon: '🤖',
     category: 'ai',
   },
+
+  // Development
   {
-    id: 'deep-research',
-    name: 'Deep Research',
-    description: 'Strategic analysis & research',
-    icon: '🔬',
-    category: 'ai',
-  },
-  // Automation
-  {
-    id: 'automation',
-    name: 'Automation',
-    description: 'Task automation & workflows',
-    icon: '⚙️',
-    category: 'automation',
+    id: 'web-clone',
+    name: 'Web Clone',
+    description: 'Clone a website into HTML',
+    icon: '📋',
+    category: 'development',
   },
   {
-    id: 'testing',
-    name: 'Testing',
-    description: 'Automated testing suite',
-    icon: '🧪',
-    category: 'automation',
+    id: 'code-editor',
+    name: 'Code Editor',
+    description: 'Edit project files',
+    icon: '📝',
+    category: 'development',
+  },
+  {
+    id: 'terminal',
+    name: 'Terminal',
+    description: 'Command-like AI helper',
+    icon: '💻',
+    category: 'development',
   },
 ];
 
