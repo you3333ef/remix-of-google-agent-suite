@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Menu, X, PanelLeftClose, PanelLeft, Settings, 
   MessageSquare, Code, Eye, Terminal as TerminalIcon, Bot,
-  Copy, FolderOpen, LogOut, Sparkles
+  Copy, FolderOpen, LogOut, Sparkles, Search
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import AgentSelector from './AgentSelector';
@@ -16,13 +16,15 @@ import AgentBuilder from './AgentBuilder';
 import FileExplorer from './FileExplorer';
 import SettingsPanel from './SettingsPanel';
 import WebCloneTool from './WebCloneTool';
+import DeepResearchTool from './DeepResearchTool';
+import ToolSetupDialog from './ToolSetupDialog';
 import SidebarCreatePanel from './SidebarCreatePanel';
 import { defaultAgents } from '@/data/agents';
-import { Agent } from '@/types/agent';
+import { Agent, Tool } from '@/types/agent';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
-type ActivePanel = 'chat' | 'code' | 'preview' | 'terminal' | 'clone';
+type ActivePanel = 'chat' | 'code' | 'preview' | 'terminal' | 'clone' | 'research';
 type SidebarTab = 'tools' | 'files';
 
 interface ExtendedAgent extends Agent {
@@ -35,13 +37,14 @@ export default function MainLayout() {
   const [activePanel, setActivePanel] = useState<ActivePanel>('chat');
   const [showAgentBuilder, setShowAgentBuilder] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [rightPanelMode, setRightPanelMode] = useState<'code' | 'preview' | 'split' | 'clone'>('split');
+  const [rightPanelMode, setRightPanelMode] = useState<'code' | 'preview' | 'split' | 'clone' | 'research'>('split');
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('tools');
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [clonedHtml, setClonedHtml] = useState<string>('');
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string>('');
   const [selectedFileContent, setSelectedFileContent] = useState<string>('');
+  const [setupTool, setSetupTool] = useState<Tool | null>(null);
   const { user, signOut, loading } = useAuth();
   const navigate = useNavigate();
 
@@ -70,9 +73,22 @@ export default function MainLayout() {
       case 'ai-chat':
         setActivePanel('chat');
         return;
+      case 'deep-research':
+        setRightPanelMode('research');
+        setActivePanel('research');
+        return;
       default:
         return;
     }
+  };
+
+  const handleSetupTool = (tool: Tool) => {
+    setSetupTool(tool);
+  };
+
+  const handleSetupComplete = (toolId: string) => {
+    // Tool is now configured - could update local state or refetch
+    console.log(`Tool ${toolId} setup complete`);
   };
 
   const handleFileSelect = (file: { id: string; name: string; content: string | null }) => {
@@ -93,7 +109,7 @@ export default function MainLayout() {
     { id: 'code' as const, icon: Code, label: 'Code' },
     { id: 'preview' as const, icon: Eye, label: 'Preview' },
     { id: 'terminal' as const, icon: TerminalIcon, label: 'Terminal' },
-    { id: 'clone' as const, icon: Copy, label: 'Clone' },
+    { id: 'research' as const, icon: Search, label: 'Research' },
   ];
 
   if (loading) {
@@ -157,7 +173,7 @@ export default function MainLayout() {
         {/* Desktop Right Panel Mode */}
         <div className="hidden lg:flex items-center gap-3">
           <div className="flex items-center gap-0.5 bg-secondary/80 rounded-lg p-0.5 backdrop-blur-sm">
-            {['code', 'split', 'preview', 'clone'].map((mode) => (
+            {['code', 'split', 'preview', 'clone', 'research'].map((mode) => (
               <button
                 key={mode}
                 onClick={() => setRightPanelMode(mode as typeof rightPanelMode)}
@@ -252,7 +268,10 @@ export default function MainLayout() {
             {/* Sidebar Content */}
             <div className="flex-1 overflow-y-auto py-2 scrollbar-thin">
               {sidebarTab === 'tools' ? (
-                <ToolsSidebar onToolSelect={handleToolSelect} />
+                <ToolsSidebar 
+                  onToolSelect={handleToolSelect} 
+                  onSetupTool={handleSetupTool}
+                />
               ) : (
                 <FileExplorer onFileSelect={handleFileSelect} />
               )}
@@ -299,6 +318,7 @@ export default function MainLayout() {
             {activePanel === 'preview' && <PreviewPane htmlContent={clonedHtml} />}
             {activePanel === 'terminal' && <TerminalComponent />}
             {activePanel === 'clone' && <WebCloneTool onCodeGenerated={handleCodeGenerated} />}
+            {activePanel === 'research' && <DeepResearchTool />}
           </div>
 
           {/* Desktop: Show based on rightPanelMode */}
@@ -312,6 +332,7 @@ export default function MainLayout() {
             )}
             {rightPanelMode === 'preview' && <PreviewPane htmlContent={clonedHtml} />}
             {rightPanelMode === 'clone' && <WebCloneTool onCodeGenerated={handleCodeGenerated} />}
+            {rightPanelMode === 'research' && <DeepResearchTool />}
             {rightPanelMode === 'split' && (
               <div className="flex flex-col h-full">
                 <div className="flex-1 min-h-0">
@@ -333,6 +354,12 @@ export default function MainLayout() {
       {/* Modals */}
       <AgentBuilder isOpen={showAgentBuilder} onClose={() => setShowAgentBuilder(false)} />
       <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      <ToolSetupDialog 
+        tool={setupTool} 
+        isOpen={!!setupTool} 
+        onClose={() => setSetupTool(null)}
+        onSetupComplete={handleSetupComplete}
+      />
     </div>
   );
 }
