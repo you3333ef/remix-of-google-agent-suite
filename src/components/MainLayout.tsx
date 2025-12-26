@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { 
   Menu, X, PanelLeftClose, PanelLeft, Settings, 
   MessageSquare, Code, Eye, Terminal as TerminalIcon, Bot,
-  Copy, FolderOpen, LogOut, LayoutDashboard, Sparkles
+  Copy, FolderOpen, LogOut, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import AgentSelector from './AgentSelector';
@@ -20,7 +20,6 @@ import SidebarCreatePanel from './SidebarCreatePanel';
 import { defaultAgents } from '@/data/agents';
 import { Agent } from '@/types/agent';
 import { useAuth } from '@/hooks/useAuth';
-import { useProject } from '@/hooks/useProject';
 import { cn } from '@/lib/utils';
 
 type ActivePanel = 'chat' | 'code' | 'preview' | 'terminal' | 'clone';
@@ -44,7 +43,6 @@ export default function MainLayout() {
   const [selectedFileName, setSelectedFileName] = useState<string>('');
   const [selectedFileContent, setSelectedFileContent] = useState<string>('');
   const { user, signOut, loading } = useAuth();
-  const { activeProject, isLoading: projectLoading } = useProject();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -52,12 +50,6 @@ export default function MainLayout() {
       navigate('/auth');
     }
   }, [user, loading, navigate]);
-
-  useEffect(() => {
-    if (!loading && !projectLoading && user && !activeProject) {
-      navigate('/projects');
-    }
-  }, [activeProject, loading, projectLoading, user, navigate]);
 
   const handleToolSelect = (toolId: string) => {
     setSelectedTool(toolId);
@@ -116,23 +108,11 @@ export default function MainLayout() {
           </Button>
 
           <div className="flex items-center gap-3">
-            <Link to="/projects" className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center hover:scale-105 transition-transform shadow-lg">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
               <Bot className="h-5 w-5 text-primary-foreground" />
-            </Link>
-            <div className="hidden sm:flex items-center gap-3">
+            </div>
+            <div className="hidden sm:block">
               <h1 className="text-lg font-display font-bold gradient-text">Agentic Max</h1>
-              {activeProject && (
-                <>
-                  <span className="text-border">/</span>
-                  <Link 
-                    to="/projects" 
-                    className="text-sm text-foreground/80 hover:text-primary transition-colors flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-secondary/50"
-                  >
-                    <LayoutDashboard className="h-3.5 w-3.5" />
-                    {activeProject.name}
-                  </Link>
-                </>
-              )}
             </div>
           </div>
         </div>
@@ -258,13 +238,12 @@ export default function MainLayout() {
               {sidebarTab === 'tools' ? (
                 <ToolsSidebar onToolSelect={handleToolSelect} />
               ) : (
-                <FileExplorer projectId={activeProject?.id} onFileSelect={handleFileSelect} />
+                <FileExplorer onFileSelect={handleFileSelect} />
               )}
             </div>
 
             {/* Quick Create Panel */}
             <SidebarCreatePanel 
-              projectId={activeProject?.id} 
               onFileCreated={() => {}}
               onAgentCreated={() => {}}
             />
@@ -299,7 +278,6 @@ export default function MainLayout() {
                 fileId={selectedFileId || undefined}
                 fileName={selectedFileName}
                 initialContent={selectedFileContent}
-                projectId={activeProject?.id}
               />
             )}
             {activePanel === 'preview' && <PreviewPane htmlContent={clonedHtml} />}
@@ -314,7 +292,6 @@ export default function MainLayout() {
                 fileId={selectedFileId || undefined}
                 fileName={selectedFileName}
                 initialContent={selectedFileContent}
-                projectId={activeProject?.id}
               />
             )}
             {rightPanelMode === 'preview' && <PreviewPane htmlContent={clonedHtml} />}
@@ -326,7 +303,6 @@ export default function MainLayout() {
                     fileId={selectedFileId || undefined}
                     fileName={selectedFileName}
                     initialContent={selectedFileContent}
-                    projectId={activeProject?.id}
                   />
                 </div>
                 <div className="h-64 border-t border-border/60">
