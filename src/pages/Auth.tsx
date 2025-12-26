@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot, Mail, Lock, Eye, EyeOff, ArrowRight, Sparkles } from 'lucide-react';
+import { Bot, Mail, Lock, Eye, EyeOff, ArrowRight, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { useGoogleAuth } from '@/hooks/useGoogleAuth';
 
 // Google icon component
 const GoogleIcon = () => (
@@ -34,37 +35,37 @@ export default function Auth() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const { toast } = useToast();
-  const { signIn, signUp, signInWithGoogle, user } = useAuth();
+  const { signIn, signUp, user } = useAuth();
+  const { signInWithGoogle, isProcessing: googleLoading, isSettingUp } = useGoogleAuth();
   const navigate = useNavigate();
 
+  // Show setup screen while processing OAuth
+  if (isSettingUp) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+          <h2 className="text-xl font-semibold">Setting up your account...</h2>
+          <p className="text-muted-foreground">Preparing your Maps session</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Redirect if already logged in (non-Google users)
   useEffect(() => {
-    if (user) {
-      navigate('/');
+    if (user && !isSettingUp) {
+      // For non-Google users, redirect to home
+      const isGoogleAuth = user.app_metadata?.provider === 'google';
+      if (!isGoogleAuth) {
+        navigate('/');
+      }
     }
-  }, [user, navigate]);
+  }, [user, isSettingUp, navigate]);
 
   const handleGoogleSignIn = async () => {
-    setGoogleLoading(true);
-    try {
-      const { error } = await signInWithGoogle();
-      if (error) {
-        toast({
-          title: "Google Sign-In Failed",
-          description: error.message,
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to sign in with Google",
-        variant: "destructive"
-      });
-    } finally {
-      setGoogleLoading(false);
-    }
+    await signInWithGoogle();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

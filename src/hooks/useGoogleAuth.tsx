@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
@@ -6,13 +7,74 @@ import { useToast } from './use-toast';
 interface UseGoogleAuthReturn {
   signInWithGoogle: () => Promise<void>;
   isProcessing: boolean;
-  setupOAuthCallback: () => Promise<void>;
+  isSettingUp: boolean;
 }
 
 export function useGoogleAuth(): UseGoogleAuthReturn {
   const [isProcessing, setIsProcessing] = useState(false);
-  const { session } = useAuth();
+  const [isSettingUp, setIsSettingUp] = useState(false);
+  const [hasSetup, setHasSetup] = useState(false);
+  const { session, user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
+
+  // Auto-setup after Google OAuth login
+  useEffect(() => {
+    const runOAuthSetup = async () => {
+      if (!session?.user?.id || hasSetup || isSettingUp) return;
+      
+      // Check if this is a Google OAuth session
+      const isGoogleAuth = session.user.app_metadata?.provider === 'google' || 
+                           session.user.identities?.some(i => i.provider === 'google');
+      
+      if (!isGoogleAuth) return;
+
+      setIsSettingUp(true);
+      console.log('[GoogleAuth] Starting automatic OAuth setup...');
+
+      try {
+        // Call the OAuth callback edge function
+        const { data, error } = await supabase.functions.invoke('oauth-callback', {
+          body: {
+            user_id: session.user.id,
+            access_token: session.provider_token,
+            refresh_token: session.provider_refresh_token,
+            expires_in: session.expires_in,
+            scope: 'email profile',
+          },
+        });
+
+        if (error) {
+          console.error('[GoogleAuth] OAuth callback error:', error);
+          toast({
+            title: "Setup Warning",
+            description: "Some features may need manual setup",
+            variant: "destructive",
+          });
+        } else {
+          console.log('[GoogleAuth] OAuth setup completed:', data);
+          setHasSetup(true);
+          
+          // Auto-redirect to maps with conversation
+          if (data?.conversation_id) {
+            toast({
+              title: "Welcome!",
+              description: "Your Maps session is ready",
+            });
+            navigate(`/maps?conversation=${data.conversation_id}`);
+          } else {
+            navigate('/maps');
+          }
+        }
+      } catch (err) {
+        console.error('[GoogleAuth] Setup error:', err);
+      } finally {
+        setIsSettingUp(false);
+      }
+    };
+
+    runOAuthSetup();
+  }, [session, hasSetup, isSettingUp, toast, navigate]);
 
   const signInWithGoogle = useCallback(async () => {
     setIsProcessing(true);
@@ -20,7 +82,7 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/`,
+          redirectTo: `${window.location.origin}/auth`,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
@@ -30,7 +92,7 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
       });
 
       if (error) {
-        console.error('Google OAuth error:', error);
+        console.error('[GoogleAuth] OAuth error:', error);
         toast({
           title: "Authentication Failed",
           description: error.message,
@@ -38,7 +100,7 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
         });
       }
     } catch (err) {
-      console.error('Sign in error:', err);
+      console.error('[GoogleAuth] Sign in error:', err);
       toast({
         title: "Error",
         description: "Failed to initiate Google sign-in",
@@ -49,34 +111,9 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
     }
   }, [toast]);
 
-  const setupOAuthCallback = useCallback(async () => {
-    if (!session?.user?.id) return;
-
-    try {
-      // Call the OAuth callback edge function to set up user data
-      const { data, error } = await supabase.functions.invoke('oauth-callback', {
-        body: {
-          user_id: session.user.id,
-          access_token: session.provider_token,
-          refresh_token: session.provider_refresh_token,
-          expires_in: session.expires_in,
-          scope: 'email profile',
-        },
-      });
-
-      if (error) {
-        console.error('OAuth callback error:', error);
-      } else {
-        console.log('OAuth setup completed:', data);
-      }
-    } catch (err) {
-      console.error('Setup callback error:', err);
-    }
-  }, [session]);
-
   return {
     signInWithGoogle,
     isProcessing,
-    setupOAuthCallback,
+    isSettingUp,
   };
 }
