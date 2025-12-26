@@ -117,6 +117,7 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
         messages: apiMessages,
         agentId: activeAgent.id,
         agentName: activeAgent.name,
+        agentTools: activeAgent.tools,
         provider: selectedProvider,
         model: selectedModel,
       };
