@@ -11,3 +11,15 @@ verify_jwt = false
 
 [functions.deep-research]
 verify_jwt = false
+
+[functions.test-integration]
+verify_jwt = false
+
+[functions.send-email]
+verify_jwt = false
+
+[functions.google-maps]
+verify_jwt = false
+
+[functions.cloudflare-dns]
+verify_jwt = false
