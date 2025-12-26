@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
-import Editor, { OnMount } from '@monaco-editor/react';
-import { Save, Copy, Download, Maximize2, Minimize2, FileCode, Loader2, Users } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import Editor, { OnMount, Monaco } from '@monaco-editor/react';
+import { Save, Copy, Download, Maximize2, Minimize2, FileCode, Loader2, Users, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -41,10 +41,33 @@ export default function MonacoEditor({
   const [currentFileId, setCurrentFileId] = useState<string | null>(fileId || null);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [isAIEnabled, setIsAIEnabled] = useState(true);
+  const [isGettingSuggestion, setIsGettingSuggestion] = useState(false);
   const editorRef = useRef<any>(null);
+  const monacoRef = useRef<Monaco | null>(null);
   const channelRef = useRef<any>(null);
+  const completionProviderRef = useRef<any>(null);
   const { toast } = useToast();
   const { user } = useAuth();
+
+  // AI Code Completion function
+  const getAICompletion = useCallback(async (codeContext: string, lang: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('code-completion', {
+        body: { 
+          code: codeContext, 
+          language: lang, 
+          type: 'suggestion' 
+        },
+      });
+
+      if (error) throw error;
+      return data?.suggestion || '';
+    } catch (error) {
+      console.error('AI completion error:', error);
+      return '';
+    }
+  }, []);
 
   const getLanguageFromExtension = (filename: string): string => {
     const ext = filename.split('.').pop()?.toLowerCase();
@@ -193,8 +216,54 @@ export default function MonacoEditor({
     }
   };
 
-  const handleEditorMount: OnMount = (editor) => {
+  const handleEditorMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
+    monacoRef.current = monaco;
+
+    // Register AI completion provider
+    if (isAIEnabled && !completionProviderRef.current) {
+      completionProviderRef.current = monaco.languages.registerInlineCompletionsProvider(
+        ['typescript', 'javascript', 'python', 'html', 'css', 'json'],
+        {
+          provideInlineCompletions: async (model, position, context, token) => {
+            if (!isAIEnabled) return { items: [] };
+            
+            setIsGettingSuggestion(true);
+            
+            // Get code before cursor
+            const textUntilPosition = model.getValueInRange({
+              startLineNumber: Math.max(1, position.lineNumber - 20),
+              startColumn: 1,
+              endLineNumber: position.lineNumber,
+              endColumn: position.column,
+            });
+
+            const suggestion = await getAICompletion(textUntilPosition, language);
+            
+            setIsGettingSuggestion(false);
+            
+            if (!suggestion || token.isCancellationRequested) {
+              return { items: [] };
+            }
+
+            return {
+              items: [
+                {
+                  insertText: suggestion,
+                  range: {
+                    startLineNumber: position.lineNumber,
+                    startColumn: position.column,
+                    endLineNumber: position.lineNumber,
+                    endColumn: position.column,
+                  },
+                },
+              ],
+            };
+          },
+          freeInlineCompletions: () => {},
+        }
+      );
+    }
 
     // Track cursor position for collaboration
     editor.onDidChangeCursorPosition((e) => {
@@ -302,6 +371,21 @@ export default function MonacoEditor({
               )}
             </div>
           )}
+
+          {/* AI Completion Status */}
+          <Button
+            variant={isAIEnabled ? "ghost" : "outline"}
+            size="icon-sm"
+            onClick={() => setIsAIEnabled(!isAIEnabled)}
+            title={isAIEnabled ? "AI Suggestions On" : "AI Suggestions Off"}
+            className="mr-1"
+          >
+            <Sparkles className={cn(
+              "h-3.5 w-3.5",
+              isAIEnabled ? "text-primary" : "text-muted-foreground",
+              isGettingSuggestion && "animate-pulse"
+            )} />
+          </Button>
 
           {isConnected && (
             <div className="flex items-center gap-1 text-xs text-neon-green mr-2">
