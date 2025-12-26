@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, Mic, Sparkles, RotateCcw, Copy, ThumbsUp, ThumbsDown, StopCircle } from 'lucide-react';
+import { Send, Paperclip, Sparkles, RotateCcw, Copy, ThumbsUp, ThumbsDown, StopCircle, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Agent, Message } from '@/types/agent';
 import { useToast } from '@/hooks/use-toast';
@@ -72,7 +72,6 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
     const controller = new AbortController();
     setAbortController(controller);
 
-    // Prepare messages for API
     const apiMessages = messages
       .filter(m => m.role !== 'system')
       .map(m => ({ role: m.role, content: m.content }));
@@ -155,7 +154,6 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
         }
       }
 
-      // Final update with agentId
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last?.role === 'assistant') {
@@ -195,8 +193,21 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
     toast({ title: "Copied", description: "Message copied to clipboard" });
   };
 
+  const regenerateMessage = async () => {
+    if (isStreaming || messages.length < 2) return;
+    
+    const lastUserMessageIndex = [...messages].reverse().findIndex(m => m.role === 'user');
+    if (lastUserMessageIndex === -1) return;
+    
+    const actualIndex = messages.length - 1 - lastUserMessageIndex;
+    const lastUserMessage = messages[actualIndex];
+    
+    setMessages(prev => prev.slice(0, actualIndex));
+    setInput(lastUserMessage.content);
+  };
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-background/50">
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
         {messages.map((message, index) => (
@@ -206,10 +217,10 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
               "flex gap-3 animate-fade-in",
               message.role === 'user' ? "flex-row-reverse" : "flex-row"
             )}
-            style={{ animationDelay: `${index * 50}ms` }}
+            style={{ animationDelay: `${index * 30}ms` }}
           >
             <div className={cn(
-              "w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0",
+              "w-9 h-9 rounded-xl flex items-center justify-center text-sm shrink-0 shadow-sm",
               message.role === 'user'
                 ? "bg-primary text-primary-foreground"
                 : `bg-gradient-to-br ${activeAgent.color}`
@@ -222,32 +233,37 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
               message.role === 'user' ? "items-end" : "items-start"
             )}>
               <div className={cn(
-                "rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap",
+                "rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap leading-relaxed",
                 message.role === 'user'
-                  ? "bg-primary text-primary-foreground rounded-br-md"
-                  : "bg-secondary text-foreground rounded-bl-md"
+                  ? "bg-primary text-primary-foreground rounded-br-lg shadow-lg"
+                  : "bg-card border border-border/60 text-foreground rounded-bl-lg shadow-md"
               )}>
                 {message.content}
               </div>
 
               {message.role === 'assistant' && (
-                <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-0.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Button 
                     variant="ghost" 
                     size="icon-sm" 
-                    className="h-6 w-6"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
                     onClick={() => copyMessage(message.content)}
                   >
-                    <Copy className="h-3 w-3" />
+                    <Copy className="h-3.5 w-3.5" />
                   </Button>
-                  <Button variant="ghost" size="icon-sm" className="h-6 w-6">
-                    <ThumbsUp className="h-3 w-3" />
+                  <Button variant="ghost" size="icon-sm" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+                    <ThumbsUp className="h-3.5 w-3.5" />
                   </Button>
-                  <Button variant="ghost" size="icon-sm" className="h-6 w-6">
-                    <ThumbsDown className="h-3 w-3" />
+                  <Button variant="ghost" size="icon-sm" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+                    <ThumbsDown className="h-3.5 w-3.5" />
                   </Button>
-                  <Button variant="ghost" size="icon-sm" className="h-6 w-6">
-                    <RotateCcw className="h-3 w-3" />
+                  <Button 
+                    variant="ghost" 
+                    size="icon-sm" 
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    onClick={regenerateMessage}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               )}
@@ -262,16 +278,16 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
         {isStreaming && messages[messages.length - 1]?.role !== 'assistant' && (
           <div className="flex gap-3 animate-fade-in">
             <div className={cn(
-              "w-8 h-8 rounded-lg flex items-center justify-center text-sm bg-gradient-to-br",
+              "w-9 h-9 rounded-xl flex items-center justify-center text-sm bg-gradient-to-br shadow-sm",
               activeAgent.color
             )}>
               {activeAgent.avatar}
             </div>
-            <div className="bg-secondary rounded-2xl rounded-bl-md px-4 py-3">
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <div className="bg-card border border-border/60 rounded-2xl rounded-bl-lg px-4 py-3 shadow-md">
+              <div className="flex gap-1.5">
+                <span className="w-2 h-2 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-2 h-2 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-2 h-2 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
               </div>
             </div>
           </div>
@@ -281,9 +297,9 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
       </div>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-border">
-        <div className="glass-panel p-2 flex items-end gap-2">
-          <Button variant="ghost" size="icon" className="shrink-0">
+      <div className="p-4 border-t border-border/60 bg-card/30 backdrop-blur-sm">
+        <div className="glass-panel p-2.5 flex items-end gap-2">
+          <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-foreground">
             <Paperclip className="h-4 w-4" />
           </Button>
 
@@ -301,16 +317,13 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
             />
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
-            <Button variant="ghost" size="icon">
-              <Mic className="h-4 w-4" />
-            </Button>
+          <div className="flex items-center gap-1.5 shrink-0">
             {isStreaming ? (
               <Button
                 variant="destructive"
                 size="icon"
                 onClick={stopStreaming}
-                className="rounded-xl"
+                className="rounded-xl shadow-lg"
               >
                 <StopCircle className="h-4 w-4" />
               </Button>
@@ -320,7 +333,7 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
                 size="icon"
                 onClick={handleSend}
                 disabled={!input.trim()}
-                className="rounded-xl"
+                className="rounded-xl shadow-lg"
               >
                 <Send className="h-4 w-4" />
               </Button>
@@ -328,9 +341,9 @@ export default function ChatUI({ activeAgent }: ChatUIProps) {
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-2 mt-2 text-xs text-muted-foreground">
-          <Sparkles className="h-3 w-3" />
-          <span>Powered by {activeAgent.provider.toUpperCase()}</span>
+        <div className="flex items-center justify-center gap-2 mt-2.5 text-xs text-muted-foreground">
+          <Sparkles className="h-3 w-3 text-primary" />
+          <span>Powered by <span className="text-foreground/80 font-medium">{activeAgent.provider.toUpperCase()}</span></span>
         </div>
       </div>
     </div>
