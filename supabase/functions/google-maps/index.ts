@@ -35,24 +35,16 @@ serve(async (req) => {
     
     console.log(`[GoogleMaps] Action: ${action}`);
     
-    // Get API key either from request or from user settings
-    let mapsApiKey = apiKey;
+    // Get API key from environment secret (admin-configured)
+    let mapsApiKey = Deno.env.get('GOOGLE_MAPS_API_KEY');
     
-    if (!mapsApiKey && userId) {
-      const { data: settings, error: settingsError } = await supabase
-        .from('user_settings')
-        .select('api_keys')
-        .eq('user_id', userId)
-        .single();
-
-      if (!settingsError && settings?.api_keys) {
-        const apiKeys = settings.api_keys as Record<string, string>;
-        mapsApiKey = apiKeys.google_maps_api_key;
-      }
+    // Fallback to request apiKey if provided (for backward compatibility)
+    if (!mapsApiKey && apiKey) {
+      mapsApiKey = apiKey;
     }
 
     if (!mapsApiKey && action !== 'getApiKey') {
-      throw new Error('Google Maps API key not found. Please configure it in settings.');
+      throw new Error('Google Maps API key not configured. Please contact administrator.');
     }
 
     let result: any;
