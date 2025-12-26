@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
-  Menu, X, PanelLeftClose, PanelLeft, Plus, Settings, 
+  Menu, X, PanelLeftClose, PanelLeft, Settings, 
   MessageSquare, Code, Eye, Terminal as TerminalIcon, Bot,
   Copy, FolderOpen, LogOut, LayoutDashboard
 } from 'lucide-react';
@@ -16,6 +16,7 @@ import AgentBuilder from './AgentBuilder';
 import FileExplorer from './FileExplorer';
 import SettingsPanel from './SettingsPanel';
 import WebCloneTool from './WebCloneTool';
+import SidebarCreatePanel from './SidebarCreatePanel';
 import { defaultAgents } from '@/data/agents';
 import { Agent } from '@/types/agent';
 import { useAuth } from '@/hooks/useAuth';
@@ -271,17 +272,16 @@ export default function MainLayout() {
               )}
             </div>
 
-            {/* Create Agent Button */}
-            <div className="p-3 border-t border-border">
-              <Button
-                variant="agent"
-                className="w-full gap-2"
-                onClick={() => setShowAgentBuilder(true)}
-              >
-                <Plus className="h-4 w-4" />
-                Create Agent
-              </Button>
-            </div>
+            {/* Quick Create Panel */}
+            <SidebarCreatePanel 
+              projectId={activeProject?.id} 
+              onFileCreated={() => {
+                // Trigger file explorer refresh if needed
+              }}
+              onAgentCreated={() => {
+                // Trigger agent selector refresh if needed
+              }}
+            />
           </div>
         </aside>
 
