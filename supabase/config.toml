@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.cloudflare-dns]
 verify_jwt = false
+
+[functions.oauth-callback]
+verify_jwt = false
