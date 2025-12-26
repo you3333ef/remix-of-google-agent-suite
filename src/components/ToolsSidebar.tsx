@@ -64,7 +64,9 @@ export default function ToolsSidebar({ onToolSelect }: ToolsSidebarProps) {
     onToolSelect?.(toolId);
   };
 
-  const categories = Object.keys(categoryLabels) as ToolCategory[];
+  const categories = (Object.keys(categoryLabels) as ToolCategory[]).filter((category) =>
+    tools.some((t) => t.category === category)
+  );
 
   return (
     <div className="space-y-2">
